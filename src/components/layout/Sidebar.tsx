@@ -29,7 +29,7 @@ const SidebarLink = ({ to, icon: Icon, label, isCollapsed }: SidebarLinkProps) =
         "flex items-center gap-3 px-3 py-2 rounded-md transition-colors",
         isActive 
           ? "text-sidebar-primary-foreground bg-sidebar-primary" 
-          : "text-sidebar-foreground/60 hover:text-sidebar-primary-foreground hover:bg-sidebar-accent/50"
+          : "text-sidebar-foreground/40 hover:text-sidebar-primary-foreground hover:bg-sidebar-accent/50"
       )}
     >
       <Icon size={20} />
