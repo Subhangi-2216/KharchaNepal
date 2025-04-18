@@ -61,6 +61,103 @@ const mockExpenses = [
   { id: 10, merchant: "Movie Tickets", date: "2025-04-03", category: "Entertainment", amount: 900 }
 ];
 
+function ExpenseQueryChatbot() {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [messages, setMessages] = useState([
+    { role: "system", content: "Hello! I'm your Expense Query Assistant. Ask me about your expenses or tell me to add a new one." }
+  ]);
+  const [input, setInput] = useState("");
+
+  const handleSendMessage = () => {
+    if (!input.trim()) return;
+    setMessages([...messages, { role: "user", content: input }]);
+    
+    setTimeout(() => {
+      let botResponse = "I'm not sure how to answer that query.";
+      if (input.toLowerCase().includes("how much") && input.toLowerCase().includes("food")) {
+        botResponse = "You spent NPR 3,500 on Food this month.";
+      } else if (input.toLowerCase().includes("travel") && input.toLowerCase().includes("last week")) {
+        botResponse = "Your Travel expenses last week were NPR 2,350.";
+      } else if (input.toLowerCase().includes("add") && input.toLowerCase().includes("expense")) {
+        botResponse = "I've added a new expense of NPR 500 for Food at Bhatbhateni on April 15th, 2025.";
+      }
+      setMessages(prev => [...prev, { role: "system", content: botResponse }]);
+    }, 500);
+    
+    setInput("");
+  };
+
+  return (
+    <div 
+      className={cn(
+        "fixed transition-all duration-300 z-50",
+        isExpanded 
+          ? "bottom-4 right-4 w-full md:w-1/3 h-[calc(100vh-6rem)]" 
+          : "bottom-4 right-4 w-14 h-14"
+      )}
+    >
+      {isExpanded ? (
+        <Card className="h-full flex flex-col">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Expense Query Assistant</CardTitle>
+              <CardDescription>Ask about your expenses or add new ones</CardDescription>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={() => setIsExpanded(false)}
+            >
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </CardHeader>
+          <CardContent className="flex-1 overflow-hidden p-0">
+            <div className="h-full flex flex-col">
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {messages.map((msg, idx) => (
+                  <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <div className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                      msg.role === "user" 
+                        ? "bg-primary text-primary-foreground" 
+                        : "bg-muted"
+                    }`}>
+                      {msg.content}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="p-4 border-t flex">
+                <Input 
+                  placeholder="Ask about your expenses..." 
+                  className="flex-1" 
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleSendMessage()}
+                />
+                <Button 
+                  className="ml-2" 
+                  size="icon"
+                  onClick={handleSendMessage}
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Button 
+          className="w-full h-full rounded-full"
+          variant="default"
+          onClick={() => setIsExpanded(true)}
+        >
+          <MessageSquare className="h-6 w-6" />
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function AddExpenseDialog() {
   const [date, setDate] = useState<Date | undefined>(new Date());
   
@@ -223,92 +320,6 @@ function AddExpenseDialog() {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function ExpenseQueryChatbot() {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [messages, setMessages] = useState([
-    { role: "system", content: "Hello! I'm your Expense Query Assistant. Ask me about your expenses or tell me to add a new one." }
-  ]);
-  const [input, setInput] = useState("");
-
-  const handleSendMessage = () => {
-    if (!input.trim()) return;
-    
-    setMessages([...messages, { role: "user", content: input }]);
-    
-    setTimeout(() => {
-      let botResponse = "I'm not sure how to answer that query.";
-      
-      if (input.toLowerCase().includes("how much") && input.toLowerCase().includes("food")) {
-        botResponse = "You spent NPR 3,500 on Food this month.";
-      } else if (input.toLowerCase().includes("travel") && input.toLowerCase().includes("last week")) {
-        botResponse = "Your Travel expenses last week were NPR 2,350.";
-      } else if (input.toLowerCase().includes("add") && input.toLowerCase().includes("expense")) {
-        botResponse = "I've added a new expense of NPR 500 for Food at Bhatbhateni on April 15th, 2025.";
-      }
-      
-      setMessages(prev => [...prev, { role: "system", content: botResponse }]);
-    }, 500);
-    
-    setInput("");
-  };
-
-  return (
-    <div className={cn(
-      "fixed bottom-4 right-4 transition-all duration-300 z-50",
-      isExpanded ? "w-full md:w-1/3 h-[calc(100vh-6rem)]" : "w-64 h-96"
-    )}>
-      <Card className="h-full flex flex-col">
-        <CardHeader className="pb-2 flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Expense Query Assistant</CardTitle>
-            <CardDescription>Ask about your expenses or add new ones</CardDescription>
-          </div>
-          <Button 
-            variant="ghost" 
-            size="icon"
-            onClick={() => setIsExpanded(!isExpanded)}
-          >
-            {isExpanded ? <ChevronDown /> : <ChevronUp />}
-          </Button>
-        </CardHeader>
-        <CardContent className="flex-1 overflow-hidden p-0">
-          <div className="h-full flex flex-col">
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {messages.map((msg, idx) => (
-                <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                    msg.role === "user" 
-                      ? "bg-primary text-primary-foreground" 
-                      : "bg-muted"
-                  }`}>
-                    {msg.content}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="p-4 border-t flex">
-              <Input 
-                placeholder="Ask about your expenses..." 
-                className="flex-1" 
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleSendMessage()}
-              />
-              <Button 
-                className="ml-2" 
-                size="icon"
-                onClick={handleSendMessage}
-              >
-                <Send size={16} />
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
   );
 }
 

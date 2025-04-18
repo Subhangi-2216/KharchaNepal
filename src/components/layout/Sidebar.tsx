@@ -28,8 +28,8 @@ const SidebarLink = ({ to, icon: Icon, label, isCollapsed }: SidebarLinkProps) =
       className={cn(
         "flex items-center gap-3 px-3 py-2 rounded-md transition-colors",
         isActive 
-          ? "text-sidebar-primary-foreground bg-sidebar-primary" 
-          : "text-sidebar-foreground/40 hover:text-sidebar-primary-foreground hover:bg-sidebar-accent/50"
+          ? "bg-white/20 text-white" 
+          : "text-white/70 hover:bg-white/10"
       )}
     >
       <Icon size={20} />
@@ -44,20 +44,20 @@ export function Sidebar() {
   return (
     <div 
       className={cn(
-        "h-screen flex flex-col bg-sidebar-default border-r border-sidebar-border transition-all duration-300",
+        "h-screen flex flex-col bg-blue-600 transition-all duration-300",
         collapsed ? "w-16" : "w-64"
       )}
     >
       {/* Logo/Header */}
-      <div className="p-4 flex items-center justify-between">
+      <div className="p-4 flex items-center justify-between text-white">
         {!collapsed && (
-          <h1 className="text-lg font-bold text-sidebar-primary">
+          <h1 className="text-lg font-bold">
             Kharcha Nepal
           </h1>
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="p-1 rounded-full hover:bg-sidebar-accent/50"
+          className="p-1 rounded-full hover:bg-white/10 text-white"
         >
           {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
         </button>
@@ -72,9 +72,9 @@ export function Sidebar() {
       </div>
 
       {/* Footer */}
-      <div className="p-4 border-t border-sidebar-border">
+      <div className="p-4">
         {!collapsed && (
-          <div className="text-xs text-sidebar-foreground opacity-60">
+          <div className="text-xs text-white/60">
             KharchaNP v1.0
           </div>
         )}
