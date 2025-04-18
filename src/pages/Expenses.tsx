@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { 
   Dialog, 
@@ -47,7 +46,6 @@ import {
   Upload 
 } from "lucide-react";
 
-// Mock expenses data
 const mockExpenses = [
   { id: 1, merchant: "Bhatbhateni", date: "2025-04-15", category: "Food", amount: 1850 },
   { id: 2, merchant: "City Taxi", date: "2025-04-14", category: "Travel", amount: 350 },
@@ -61,7 +59,6 @@ const mockExpenses = [
   { id: 10, merchant: "Movie Tickets", date: "2025-04-03", category: "Entertainment", amount: 900 }
 ];
 
-// Add Expense Dialog Component
 function AddExpenseDialog() {
   const [date, setDate] = useState<Date | undefined>(new Date());
   
@@ -178,7 +175,6 @@ function AddExpenseDialog() {
                 After uploading, we'll extract the information using OCR technology.
                 You'll be able to review and edit before saving.
               </div>
-              {/* This would be shown after "processing" the receipt */}
               <div className="hidden border rounded-lg p-4 mt-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">Extracted Information</span>
@@ -228,8 +224,8 @@ function AddExpenseDialog() {
   );
 }
 
-// Expense Query Chatbot Component
 function ExpenseQueryChatbot() {
+  const [isExpanded, setIsExpanded] = useState(false);
   const [messages, setMessages] = useState([
     { role: "system", content: "Hello! I'm your Expense Query Assistant. Ask me about your expenses or tell me to add a new one." }
   ]);
@@ -240,7 +236,6 @@ function ExpenseQueryChatbot() {
     
     setMessages([...messages, { role: "user", content: input }]);
     
-    // Simulate bot response based on query
     setTimeout(() => {
       let botResponse = "I'm not sure how to answer that query.";
       
@@ -259,52 +254,65 @@ function ExpenseQueryChatbot() {
   };
 
   return (
-    <Card className="h-[400px] flex flex-col">
-      <CardHeader className="pb-2">
-        <CardTitle>Expense Query Assistant</CardTitle>
-        <CardDescription>Ask about your expenses or add new ones</CardDescription>
-      </CardHeader>
-      <CardContent className="flex-1 overflow-hidden p-0">
-        <div className="h-full flex flex-col">
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.map((msg, idx) => (
-              <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                  msg.role === "user" 
-                    ? "bg-primary text-primary-foreground" 
-                    : "bg-muted"
-                }`}>
-                  {msg.content}
+    <div className={cn(
+      "fixed bottom-4 right-4 transition-all duration-300 z-50",
+      isExpanded ? "w-full md:w-1/3 h-[calc(100vh-6rem)]" : "w-64 h-96"
+    )}>
+      <Card className="h-full flex flex-col">
+        <CardHeader className="pb-2 flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Expense Query Assistant</CardTitle>
+            <CardDescription>Ask about your expenses or add new ones</CardDescription>
+          </div>
+          <Button 
+            variant="ghost" 
+            size="icon"
+            onClick={() => setIsExpanded(!isExpanded)}
+          >
+            {isExpanded ? <ChevronDown /> : <ChevronUp />}
+          </Button>
+        </CardHeader>
+        <CardContent className="flex-1 overflow-hidden p-0">
+          <div className="h-full flex flex-col">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {messages.map((msg, idx) => (
+                <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                    msg.role === "user" 
+                      ? "bg-primary text-primary-foreground" 
+                      : "bg-muted"
+                  }`}>
+                    {msg.content}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+            <div className="p-4 border-t flex">
+              <Input 
+                placeholder="Ask about your expenses..." 
+                className="flex-1" 
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleSendMessage()}
+              />
+              <Button 
+                className="ml-2" 
+                size="icon"
+                onClick={handleSendMessage}
+              >
+                <Send size={16} />
+              </Button>
+            </div>
           </div>
-          <div className="p-4 border-t flex">
-            <Input 
-              placeholder="Ask about your expenses..." 
-              className="flex-1" 
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleSendMessage()}
-            />
-            <Button 
-              className="ml-2" 
-              size="icon"
-              onClick={handleSendMessage}
-            >
-              <Send size={16} />
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
 export default function ExpensesPage() {
   const [filterText, setFilterText] = useState("");
   
-  // Filter expenses based on search input
   const filteredExpenses = mockExpenses.filter(expense => 
     expense.merchant.toLowerCase().includes(filterText.toLowerCase()) ||
     expense.category.toLowerCase().includes(filterText.toLowerCase())
@@ -322,73 +330,69 @@ export default function ExpensesPage() {
         <AddExpenseDialog />
       </div>
       
-      <div className="grid gap-6 md:grid-cols-3">
-        <div className="md:col-span-2">
-          <div className="flex items-center space-x-2 mb-4">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="Search expenses..." 
-              value={filterText}
-              onChange={e => setFilterText(e.target.value)}
-              className="flex-1"
-            />
-          </div>
-          
-          <div className="border rounded-lg overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="text-left p-3 font-medium text-sm">Merchant</th>
-                  <th className="text-left p-3 font-medium text-sm">Date</th>
-                  <th className="text-left p-3 font-medium text-sm">Category</th>
-                  <th className="text-right p-3 font-medium text-sm">Amount</th>
-                  <th className="text-right p-3 font-medium text-sm">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {filteredExpenses.map(expense => (
-                  <tr key={expense.id} className="hover:bg-muted/30">
-                    <td className="p-3">{expense.merchant}</td>
-                    <td className="p-3 text-muted-foreground">
-                      {format(new Date(expense.date), "MMM dd, yyyy")}
-                    </td>
-                    <td className="p-3">
-                      <span className="px-2 py-1 rounded-full text-xs bg-muted">
-                        {expense.category}
-                      </span>
-                    </td>
-                    <td className="p-3 text-right font-medium">NPR {expense.amount}</td>
-                    <td className="p-3 text-right">
-                      <div className="flex justify-end space-x-2">
-                        <Button variant="ghost" size="icon">
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon">
-                          <Trash className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          
-          {filteredExpenses.length === 0 && (
-            <div className="text-center p-8 border rounded-lg bg-muted/30 mt-4">
-              <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
-              <h3 className="font-medium">No expenses found</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                Try adjusting your search or add a new expense
-              </p>
-            </div>
-          )}
+      <div className="w-full">
+        <div className="flex items-center space-x-2 mb-4">
+          <Search className="h-4 w-4 text-muted-foreground" />
+          <Input 
+            placeholder="Search expenses..." 
+            value={filterText}
+            onChange={e => setFilterText(e.target.value)}
+            className="flex-1"
+          />
         </div>
         
-        <div>
-          <ExpenseQueryChatbot />
+        <div className="border rounded-lg overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="text-left p-3 font-medium text-sm">Merchant</th>
+                <th className="text-left p-3 font-medium text-sm">Date</th>
+                <th className="text-left p-3 font-medium text-sm">Category</th>
+                <th className="text-right p-3 font-medium text-sm">Amount</th>
+                <th className="text-right p-3 font-medium text-sm">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {filteredExpenses.map(expense => (
+                <tr key={expense.id} className="hover:bg-muted/30">
+                  <td className="p-3">{expense.merchant}</td>
+                  <td className="p-3 text-muted-foreground">
+                    {format(new Date(expense.date), "MMM dd, yyyy")}
+                  </td>
+                  <td className="p-3">
+                    <span className="px-2 py-1 rounded-full text-xs bg-muted">
+                      {expense.category}
+                    </span>
+                  </td>
+                  <td className="p-3 text-right font-medium">NPR {expense.amount}</td>
+                  <td className="p-3 text-right">
+                    <div className="flex justify-end space-x-2">
+                      <Button variant="ghost" size="icon">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon">
+                        <Trash className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
+        
+        {filteredExpenses.length === 0 && (
+          <div className="text-center p-8 border rounded-lg bg-muted/30 mt-4">
+            <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+            <h3 className="font-medium">No expenses found</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Try adjusting your search or add a new expense
+            </p>
+          </div>
+        )}
       </div>
+
+      <ExpenseQueryChatbot />
     </div>
   );
 }

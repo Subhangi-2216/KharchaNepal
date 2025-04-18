@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { 
   Card, 
@@ -12,7 +11,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Send } from "lucide-react";
 
-// Temporary chart component - would be replaced with a real chart library
 const ExpenseChart = () => (
   <div className="w-full h-[300px] bg-muted/50 rounded-lg flex items-center justify-center">
     <div className="text-center p-6">
@@ -46,7 +44,6 @@ const ExpenseChart = () => (
   </div>
 );
 
-// Support chatbot component
 const SupportChatbot = () => {
   const [messages, setMessages] = useState([
     { role: "system", content: "Hello! I'm your support assistant. How can I help you with the expense tracker today?" }
@@ -58,7 +55,6 @@ const SupportChatbot = () => {
     
     setMessages([...messages, { role: "user", content: input }]);
     
-    // Simulate bot response
     setTimeout(() => {
       let botResponse = "I don't have an answer for that yet.";
       
@@ -124,15 +120,14 @@ const SupportChatbot = () => {
   );
 };
 
-// Summary card component
-const SummaryCard = ({ title, value, description }: { title: string; value: string; description: string }) => (
+const SummaryCard = ({ title, value, description }: { title: string; value: string; description?: string }) => (
   <Card>
     <CardHeader className="pb-2">
       <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
     </CardHeader>
     <CardContent>
       <div className="text-2xl font-bold">NPR {value}</div>
-      <p className="text-xs text-muted-foreground mt-1">{description}</p>
+      {description && <p className="text-xs text-muted-foreground mt-1">{description}</p>}
     </CardContent>
   </Card>
 );
@@ -147,16 +142,10 @@ export default function HomePage() {
         </p>
       </div>
       
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <SummaryCard 
           title="Monthly Total" 
           value="24,560" 
-          description="15% increase from last month"
-        />
-        <SummaryCard 
-          title="Average Daily" 
-          value="818" 
-          description="Based on this month's expenses"
         />
         <SummaryCard 
           title="Largest Expense" 
