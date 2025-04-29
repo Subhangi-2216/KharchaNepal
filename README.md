@@ -1,73 +1,89 @@
-# Welcome to your Lovable project
+# Welcome to Kharcha Nepal Tracker
 
-## Project info
+This project is a personal expense tracker application.
 
-**URL**: https://lovable.dev/projects/ef8de29b-905b-4c66-bdf5-f14b103bc2ff
+## Project Overview
 
-## How can I edit this code?
+<!-- Add a brief description of your project -->
 
-There are several ways of editing your application.
+**Tech Stack**: React, TypeScript, FastAPI, Python
 
-**Use Lovable**
+<!-- Optional: Add link to your live deployment -->
+<!-- **URL**: [Link to your deployed app] -->
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/ef8de29b-905b-4c66-bdf5-f14b103bc2ff) and start prompting.
+## Getting Started
 
-Changes made via Lovable will be committed automatically to this repo.
+### Prerequisites
 
-**Use your preferred IDE**
+- Node.js (v18 or later recommended)
+- Python (v3.9 or later recommended)
+- pip (Python package installer)
+- An IDE (like VS Code)
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Use the Application
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+Follow the setup instructions below to run the application locally.
 
-Follow these steps:
+<!-- Removed section about using Lovable directly -->
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### Local Development Setup
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+If you want to work locally using your own IDE, clone this repo and follow the setup steps.
 
-# Step 3: Install the necessary dependencies.
-npm i
+#### Frontend Setup
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```bash
+cd frontend
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+This will start the React development server, usually at `http://localhost:5173`.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+#### Backend Setup
 
-**Use GitHub Codespaces**
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
+pip install -r requirements.txt
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+# Optional: Create a .env file for environment variables (see .env.example)
+# cp .env.example .env
+# Fill in your DATABASE_URL and other settings in .env
 
-## What technologies are used for this project?
+uvicorn main:app --reload --port 8000
+```
 
-This project is built with:
+This will start the FastAPI backend server, usually at `http://localhost:8000`.
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+Make sure both the frontend and backend servers are running simultaneously.
 
-## How can I deploy this project?
+## Project Structure
 
-Simply open [Lovable](https://lovable.dev/projects/ef8de29b-905b-4c66-bdf5-f14b103bc2ff) and click on Share -> Publish.
+- `frontend/`: Contains the React frontend code.
+- `backend/`: Contains the FastAPI backend code.
+- `README.md`: This file.
 
-## Can I connect a custom domain to my Lovable project?
+## Deployment
 
-Yes, you can!
+<!-- Instructions on how to deploy the application -->
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+<!-- Removed section about publishing via Lovable -->
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+## Frequently Asked Questions (FAQ)
+
+### How do I add a new dependency?
+
+- **Frontend**: `cd frontend && npm install <package-name>`
+- **Backend**: Activate your virtual environment (`source backend/.venv/bin/activate`), then `pip install <package-name>`, and finally update `requirements.txt` using `pip freeze > requirements.txt`.
+
+### Can I connect a custom domain to my project deployment?
+
+Connecting a custom domain depends on your hosting provider. Please refer to your provider's documentation for instructions.
+
+<!-- Removed link to Lovable custom domain docs -->
+
+### Where can I find database migrations?
+
+This project currently does not use a formal migration tool like Alembic. Database schema changes are managed directly through SQLAlchemy models. For significant changes or production environments, integrating Alembic is recommended.
