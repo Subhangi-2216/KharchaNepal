@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from auth.dependencies import get_current_active_user
+from src.auth.dependencies import get_current_active_user
 from models import User, CategoryEnum
 from .schemas import ExpenseReportItem # Assuming this schema exists
 from . import service
@@ -25,11 +25,11 @@ def parse_categories(category_str: Optional[str]) -> Optional[List[CategoryEnum]
     """Parses comma-separated category string into list of CategoryEnum."""
     if not category_str:
         return None
-    
+
     categories = []
     raw_categories = [c.strip() for c in category_str.split(',') if c.strip()]
     valid_category_values = {cat.value for cat in CategoryEnum}
-    
+
     for cat_str in raw_categories:
         # Simple case-insensitive match against enum values
         matched = False
@@ -45,7 +45,7 @@ def parse_categories(category_str: Optional[str]) -> Optional[List[CategoryEnum]
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid category provided: '{cat_str}'. Allowed values: {list(valid_category_values)}"
             )
-            
+
     return categories if categories else None
 
 
@@ -63,11 +63,11 @@ async def get_report_data(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Start date cannot be later than end date."
         )
-        
+
     try:
         parsed_cats = parse_categories(category)
     except HTTPException as e:
-        raise e 
+        raise e
 
     try:
         # Service function now returns the correct Pydantic model list
@@ -79,9 +79,9 @@ async def get_report_data(
             categories=parsed_cats
         )
         # No need to validate here anymore
-        return report_items 
+        return report_items
     except Exception as e:
-        print(f"Error fetching report data: {e}") 
+        print(f"Error fetching report data: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch report data."
@@ -109,21 +109,21 @@ async def download_report(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Start date cannot be later than end date."
         )
-        
+
     category_names_for_title: Optional[List[str]] = None
     filename_category_suffix = ""
     parsed_cats: Optional[List[CategoryEnum]] = None
-    
+
     try:
         parsed_cats = parse_categories(category)
         if parsed_cats:
              category_names_for_title = [cat.value for cat in parsed_cats]
              if len(parsed_cats) == 1:
-                  safe_category_name = parsed_cats[0].value.replace(" ", "_") 
+                  safe_category_name = parsed_cats[0].value.replace(" ", "_")
                   filename_category_suffix = f"_{safe_category_name}"
-                  
+
     except HTTPException as e:
-        raise e 
+        raise e
 
     try:
         # Fetch the data as Pydantic models
@@ -145,13 +145,13 @@ async def download_report(
                 csv_buffer = service.create_csv_report(expenses_report_items)
                 filename = f"{filename_base}.csv"
                 headers = {'Content-Disposition': f'attachment; filename="{filename}"'}
-                
-                if not csv_buffer.getvalue(): 
+
+                if not csv_buffer.getvalue():
                      raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No expenses found for the selected criteria.")
-                
+
                 return StreamingResponse(csv_buffer, media_type="text/csv", headers=headers)
             except HTTPException as e:
-                 raise e 
+                 raise e
             except Exception as e:
                 print(f"Error creating CSV report: {e}")
                 raise HTTPException(status_code=500, detail="Failed to generate CSV report.")
@@ -169,9 +169,9 @@ async def download_report(
                 raise HTTPException(status_code=500, detail="Failed to generate PDF report.")
 
     # This exception should now be less likely for DB session issues
-    except Exception as e: 
+    except Exception as e:
         print(f"Error preparing report download: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to prepare report for download."
-        ) 
+        )

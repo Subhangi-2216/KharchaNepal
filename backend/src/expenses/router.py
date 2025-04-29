@@ -12,19 +12,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 
 from database import get_db
-from auth.dependencies import get_current_active_user
+from src.auth.dependencies import get_current_active_user
 from models import User, Expense, CategoryEnum
 # Assuming schemas are in the same directory or accessible via src.expenses
 # Adjust import path if schemas.py is elsewhere (e.g., in src/schemas/expenses.py)
 try:
     from .schemas import (
-        ExpenseCreate, ExpenseUpdate, ExpenseInDB, 
+        ExpenseCreate, ExpenseUpdate, ExpenseInDB,
         ExpenseOCRResponse, ExtractedData
     )
 except ImportError:
      # Fallback if schemas are directly in src
      from schemas import (
-        ExpenseCreate, ExpenseUpdate, ExpenseInDB, 
+        ExpenseCreate, ExpenseUpdate, ExpenseInDB,
         ExpenseOCRResponse, ExtractedData
     )
 
@@ -61,7 +61,7 @@ async def create_expense_manual(
     """Creates a new expense via manual input."""
     try:
         expense = Expense(
-            **expense_in.model_dump(), 
+            **expense_in.model_dump(),
             user_id=current_user.id,
             is_ocr_entry=False # Explicitly set for manual entry
         )
@@ -73,7 +73,7 @@ async def create_expense_manual(
         await db.rollback()
         print(f"Error creating manual expense: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Could not create expense."
         )
 
@@ -90,7 +90,7 @@ async def create_expense_ocr(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid file type. Allowed: {', '.join(ALLOWED_IMAGE_MIMETYPES)}"
         )
-    
+
     # Simple size check (more robust check can be done while reading)
     if file.size and file.size > MAX_FILE_SIZE_BYTES:
          raise HTTPException(
@@ -111,7 +111,7 @@ async def create_expense_ocr(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not read uploaded file.")
     finally:
          await file.close()
-         
+
     # 3. Perform OCR and Parsing
     ocr_raw_text = ""
     extracted_dict = {}
@@ -122,7 +122,7 @@ async def create_expense_ocr(
             print("OCR processing returned no text.")
             # We might still proceed to save an entry with only raw text, or raise error
             # Let's proceed and indicate all fields are missing in response
-            
+
         extracted_dict = parse_ocr_text(ocr_raw_text)
     except Exception as e:
         # Catch errors from OCR service itself
@@ -136,18 +136,18 @@ async def create_expense_ocr(
         # Use extracted values if present, otherwise default to None or a sensible default
         # Important: Ensure date is present, maybe default to today if not found?
         expense_date = extracted_dict.get('date') or date.today() # Default to today if OCR fails
-        
+
         expense_data_for_db = {
             "user_id": current_user.id,
             "date": expense_date,
             "merchant_name": extracted_dict.get('merchant_name'),
-            "amount": extracted_dict.get('amount'), 
+            "amount": extracted_dict.get('amount'),
             "currency": extracted_dict.get('currency', 'NPR'), # Default currency
             "category": None, # Category must be set later
             "is_ocr_entry": True,
             "ocr_raw_text": ocr_raw_text
         }
-        
+
         # Amount is required by model, handle if not found by OCR
         if expense_data_for_db['amount'] is None:
             # Option 1: Raise error - force user to provide amount
@@ -161,14 +161,14 @@ async def create_expense_ocr(
              # We will indicate amount is missing in the response, but won't save yet.
              # Instead of saving partially, let's just return the extracted data
              # and let frontend decide how to handle missing mandatory fields (like amount) before PUT.
-             
-             # --- REVISED LOGIC: Don't save yet, return extracted data --- 
+
+             # --- REVISED LOGIC: Don't save yet, return extracted data ---
              missing_fields = ['category'] # Category is always missing initially
              extracted_data_response = ExtractedData(**extracted_dict)
              if extracted_data_response.date is None: missing_fields.append('date')
              if extracted_data_response.merchant_name is None: missing_fields.append('merchant_name')
              if extracted_data_response.amount is None: missing_fields.append('amount')
-             
+
              # Cannot create expense if mandatory fields like amount are missing. Return failure.
              # Let's modify the response to indicate failure but still provide data
              # Maybe use 200 OK but with an error message and no expense_id?
@@ -177,10 +177,10 @@ async def create_expense_ocr(
              # BUT amount is required by DB model. We MUST have an amount.
              # If OCR fails amount, we cannot proceed with saving.
              raise HTTPException(
-                 status_code=status.HTTP_400_BAD_REQUEST, 
+                 status_code=status.HTTP_400_BAD_REQUEST,
                  detail="OCR failed to extract the mandatory 'amount' field. Cannot create expense entry automatically."
              )
-             # --- End of revised logic attempt --- 
+             # --- End of revised logic attempt ---
 
         # Original Logic: Save partially (assuming amount was found)
         expense = Expense(**expense_data_for_db)
@@ -210,7 +210,7 @@ async def create_expense_ocr(
         await db.rollback()
         print(f"Error saving OCR expense: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to process OCR request and save expense."
         )
 
@@ -223,8 +223,8 @@ async def update_expense(
     current_user: User = Depends(get_current_active_user),
 ):
     """Updates an existing expense (e.g., add category after OCR)."""
-    
-    # --- Added Logging --- 
+
+    # --- Added Logging ---
     logging.info(f"--- update_expense (ID: {expense_id}) --- Received validated data:")
     logging.info(expense_in.model_dump())
     # --- End Added Logging ---
@@ -241,10 +241,10 @@ async def update_expense(
     update_data = expense_in.model_dump(exclude_unset=True)
 
     if not update_data:
-            # Although Pydantic model allows all fields Optional, 
+            # Although Pydantic model allows all fields Optional,
             # we probably shouldn't allow an empty update.
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, 
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No update data provided."
             )
 
@@ -252,7 +252,7 @@ async def update_expense(
     logging.info(f"Applying update data: {update_data}") # Log fields being applied
     for key, value in update_data.items():
         setattr(db_expense, key, value)
-        
+
     try:
         await db.commit()
         await db.refresh(db_expense)
@@ -260,7 +260,7 @@ async def update_expense(
         return db_expense
     except Exception as e:
         await db.rollback()
-        # --- Modified Logging --- 
+        # --- Modified Logging ---
         logging.error(f"Error updating expense {expense_id}: {e}", exc_info=True) # Log full exception
         # --- End Modified Logging ---
         raise HTTPException(
@@ -281,7 +281,7 @@ async def read_expenses(
     stmt = select(Expense).where(Expense.user_id == current_user.id)\
             .order_by(Expense.date.desc(), Expense.created_at.desc())\
             .offset(skip).limit(limit)
-            
+
     result = await db.execute(stmt)
     expenses = result.scalars().all()
     return list(expenses)
@@ -296,18 +296,18 @@ async def delete_expense(
     """Deletes an expense for the current user."""
     stmt = delete(Expense).where(Expense.id == expense_id, Expense.user_id == current_user.id)
     result = await db.execute(stmt)
-    
+
     if result.rowcount == 0:
          raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found")
-         
+
     try:
         await db.commit()
     except Exception as e:
         await db.rollback()
         print(f"Error deleting expense {expense_id}: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Could not delete expense."
         )
-        
-    return # Return None for 204 
+
+    return # Return None for 204

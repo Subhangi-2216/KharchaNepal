@@ -7,7 +7,7 @@ from decimal import Decimal, ROUND_HALF_UP # For rounding percentages
 from typing import List
 
 from database import get_db # Assuming async session for now
-from auth.dependencies import get_current_active_user
+from src.auth.dependencies import get_current_active_user
 from models import Expense, User, CategoryEnum
 from .schemas import DashboardStats, LargestExpenseDetail, DashboardSummary, CategorySummaryItem
 
@@ -104,7 +104,7 @@ async def get_dashboard_summary(
 
         for category_enum, amount_sum in results:
             # Handle potential None for amount_sum if db returns None for sum aggregate
-            if amount_sum is None: continue 
+            if amount_sum is None: continue
             category_name = category_enum.value if category_enum else "Uncategorized"
             # Calculate percentage, round to 2 decimal places
             percentage = float(((amount_sum / total_sum) * 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
@@ -119,4 +119,4 @@ async def get_dashboard_summary(
         return DashboardSummary(summary=summary_list, total_last_30_days=total_sum)
     except Exception as e:
         print(f"Error in /summary: {e}") # Log specific error
-        raise HTTPException(status_code=500, detail="Error calculating dashboard summary.") 
+        raise HTTPException(status_code=500, detail="Error calculating dashboard summary.")

@@ -12,8 +12,8 @@ from sqlalchemy import select
 
 from database import get_db
 from models import User
-from auth.dependencies import get_current_active_user
-from auth import service as auth_service # Assumes auth service has get_user_by_email, verify_password, get_password_hash
+from src.auth.dependencies import get_current_active_user
+from src.auth import service as auth_service # Assumes auth service has get_user_by_email, verify_password, get_password_hash
 from .schemas import (
     UserProfile, ProfileUpdate, PasswordUpdate,
     ProfileImageUpdateResponse
@@ -233,4 +233,4 @@ async def update_user_password(
         )
 
     # Return simple success message as per requirements
-    return {"message": "Password updated successfully."} 
+    return {"message": "Password updated successfully."}

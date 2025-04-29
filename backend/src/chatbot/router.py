@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 # Assuming User model might be needed if chatbot becomes user-aware later
 from models import User
-from auth.dependencies import get_current_active_user # Keep auth dependency for potential future use
+from src.auth.dependencies import get_current_active_user # Keep auth dependency for potential future use
 from .schemas import ChatbotQuery, ChatbotResponse
 # Import the new data structure and default response
 from .faqs import (
@@ -45,13 +45,13 @@ async def handle_support_query(
     # current_user: User = Depends(get_current_active_user) # Keep user dependency
 ):
     """Handles queries for the general support chatbot (Home Page).
-    
+
     Prioritizes:
     1. Data-specific queries -> Redirect to Expense Chatbot
     2. Navigation/General queries -> Provide direct answer
     3. Fallback to default response
     """
-    
+
     user_query = clean_query(payload.query)
     # We might need the full query for some checks, and words for others
     query_words = set(user_query.split())
@@ -79,4 +79,4 @@ async def handle_support_query(
     if matched_response:
         return ChatbotResponse(data=matched_response)
     else:
-        return ChatbotResponse(data=DEFAULT_RESPONSE) 
+        return ChatbotResponse(data=DEFAULT_RESPONSE)

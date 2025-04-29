@@ -17,14 +17,14 @@ PROFILE_IMAGE_DIR = UPLOAD_DIR_BASE / "profile_images"
 PROFILE_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 # --- Router Imports ---
-from auth.router import router as auth_router
+from src.auth.router import router as auth_router
 # Import other routers as you create them
 from src.expenses.router import router as expenses_router
 from src.reports.router import router as reports_router # Import reports router
 # Import the new dashboard router
-from src.dashboard.router import router as dashboard_router 
+from src.dashboard.router import router as dashboard_router
 # Import the new chatbot router
-from src.chatbot.router import router as chatbot_router 
+from src.chatbot.router import router as chatbot_router
 # Import the new user settings router
 from src.user_settings.router import router as user_settings_router
 
@@ -37,7 +37,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     logging.error(f"Caught RequestValidationError: {exc.errors()}", exc_info=False) # Log specific errors
     # You can optionally log the full exception with traceback using exc_info=True
     # logging.error(f"Caught RequestValidationError", exc_info=True)
-    
+
     # Return a JSON response similar to FastAPI's default
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -80,4 +80,4 @@ app.include_router(user_settings_router) # Include the user settings router
 @app.get("/", tags=["Root"])
 async def read_root():
     """Root endpoint for basic health check."""
-    return {"message": "Welcome to Kharcha Nepal Tracker API"} 
+    return {"message": "Welcome to Kharcha Nepal Tracker API"}
