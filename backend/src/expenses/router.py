@@ -28,12 +28,15 @@ except ImportError:
         ExpenseOCRResponse, ExtractedData
     )
 
-# Assuming ocr_service is in src directory
-# Adjust import path if ocr_service.py is elsewhere
+# Import OCR service from the new location
 try:
-    from src import ocr_service
+    from src.ocr import process_image_with_ocr, parse_ocr_text
 except ImportError:
-     import ocr_service # Fallback if it's in the same directory (less likely for src structure)
+    # Fallback import paths
+    try:
+        from ocr import process_image_with_ocr, parse_ocr_text
+    except ImportError:
+        from src.ocr.service import process_image_with_ocr, parse_ocr_text
 
 
 router = APIRouter(
@@ -113,14 +116,14 @@ async def create_expense_ocr(
     ocr_raw_text = ""
     extracted_dict = {}
     try:
-        ocr_raw_text = ocr_service.process_image_with_ocr(image_bytes)
+        ocr_raw_text = process_image_with_ocr(image_bytes)
         if not ocr_raw_text:
             # Handle case where OCR itself failed or returned empty
             print("OCR processing returned no text.")
             # We might still proceed to save an entry with only raw text, or raise error
             # Let's proceed and indicate all fields are missing in response
             
-        extracted_dict = ocr_service.parse_ocr_text(ocr_raw_text)
+        extracted_dict = parse_ocr_text(ocr_raw_text)
     except Exception as e:
         # Catch errors from OCR service itself
         print(f"Error during OCR/Parsing service call: {e}")

@@ -1,4 +1,4 @@
-# backend/src/ocr_service.py
+# backend/src/ocr/service.py
 import re
 import io
 from datetime import date, datetime
@@ -147,4 +147,4 @@ def parse_ocr_text(text: str) -> Dict[str, Any]:
         "amount": parse_amount(text),
         "currency": "NPR" # Assume NPR for now, could try parsing later
     }
-    return extracted_data 
+    return extracted_data
