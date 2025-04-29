@@ -1,4 +1,4 @@
-#!/Users/subhangilamichhane/Documents/7thsem/kharcha-nepal-tracker/backend/.venv/bin/python
+#!/Users/aasu/Desktop/OCR/KharchaNepal/backend/.venv/bin/python3.13
 # -*- coding: utf-8 -*-
 import re
 import sys
