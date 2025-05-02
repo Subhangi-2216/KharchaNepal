@@ -5,18 +5,20 @@ import { format } from 'date-fns';
 import { produce } from 'immer';
 
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import AddExpenseForm from '@/components/expenses/AddExpenseForm';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import DropzoneArea from '@/components/expenses/DropzoneArea';
+import ScanningDialog from '@/components/expenses/ScanningDialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { 
+import {
     Table,
     TableBody,
     TableCaption,
@@ -43,7 +45,7 @@ function ExpenseQueryChatbot() {
     if (!input.trim()) return;
     const newMessages = [...messages, { role: "user" as const, content: input }];
     setMessages(newMessages);
-    
+
     setTimeout(() => {
       let botResponse = "I'm not sure how to answer that query yet.";
       if (input.toLowerCase().includes("how much") && input.toLowerCase().includes("food")) {
@@ -53,16 +55,16 @@ function ExpenseQueryChatbot() {
       }
       setMessages(prev => [...prev, { role: "system" as const, content: botResponse }]);
     }, 500);
-    
+
     setInput("");
   };
 
   return (
-    <div 
+    <div
       className={cn(
         "fixed transition-all duration-300 z-50",
-        isExpanded 
-          ? "bottom-4 right-4 w-full md:w-1/3 h-[calc(100vh-6rem)]" 
+        isExpanded
+          ? "bottom-4 right-4 w-full md:w-1/3 h-[calc(100vh-6rem)]"
           : "bottom-4 right-4 w-14 h-14"
       )}
     >
@@ -73,8 +75,8 @@ function ExpenseQueryChatbot() {
               <CardTitle>Expense Query Assistant</CardTitle>
               <CardDescription>Ask about your expenses</CardDescription>
             </div>
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               size="icon"
               onClick={() => setIsExpanded(false)}
             >
@@ -93,15 +95,15 @@ function ExpenseQueryChatbot() {
                 ))}
               </div>
               <div className="p-4 border-t flex">
-                <Input 
-                  placeholder="Ask about your expenses..." 
-                  className="flex-1" 
+                <Input
+                  placeholder="Ask about your expenses..."
+                  className="flex-1"
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && handleSendMessage()}
                 />
-                <Button 
-                  className="ml-2" 
+                <Button
+                  className="ml-2"
                   size="icon"
                   onClick={handleSendMessage}
                 >
@@ -112,7 +114,7 @@ function ExpenseQueryChatbot() {
           </CardContent>
         </Card>
       ) : (
-        <Button 
+        <Button
           className="w-full h-full rounded-full shadow-lg"
           variant="default"
           onClick={() => setIsExpanded(true)}
@@ -140,8 +142,11 @@ interface Expense {
 
 interface OCRExtractedData {
     date: string | null;
+    date_confidence?: number;
     merchant_name: string | null;
+    merchant_confidence?: number;
     amount: number | null;
+    amount_confidence?: number;
     currency: string | null;
 }
 
@@ -166,7 +171,7 @@ const fetchExpenses = async (): Promise<Expense[]> => {
         if (axios.isAxiosError(error) && error.response?.status === 401) {
             throw new Error('Unauthorized. Please log in again.');
         }
-        throw error; 
+        throw error;
     }
 };
 
@@ -189,7 +194,7 @@ const uploadOCRDraft = async (file: File): Promise<OCRResponse> => {
 const updateExpense = async ({ id, data }: { id: number, data: any }): Promise<Expense> => {
     const token = localStorage.getItem('accessToken');
     if (!token) throw new Error('Authentication token not found.');
-    
+
     const response = await axios.put<Expense>(`${API_BASE_URL}/api/expenses/${id}`, data, {
         headers: { Authorization: `Bearer ${token}` },
     });
@@ -199,6 +204,7 @@ const updateExpense = async ({ id, data }: { id: number, data: any }): Promise<E
 const ExpensesPage: React.FC = () => {
     const queryClient = useQueryClient();
     const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
+    const [isScanDialogOpen, setIsScanDialogOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [isOcrMode, setIsOcrMode] = useState(false);
@@ -212,32 +218,133 @@ const ExpensesPage: React.FC = () => {
         queryFn: fetchExpenses,
         retry: 1,
     });
-    
+
     const ocrMutation = useMutation<OCRResponse, Error, File>({
         mutationFn: uploadOCRDraft,
         onSuccess: (data) => {
             toast.success(data.message || "OCR processed. Please review and add category.");
-            setOcrResult(data); 
+
+            // Format the date properly for the HTML date input (YYYY-MM-DD)
+            let formattedDate = '';
+            if (data.extracted_data.date) {
+                try {
+                    // The backend sends dates in ISO format (YYYY-MM-DD)
+                    // We need to parse it correctly to display in the date input
+
+                    // First, log the raw date from backend for debugging
+                    console.log(`Raw date from backend: ${data.extracted_data.date}`);
+
+                    // Parse the date string - handle both ISO format and other formats
+                    let dateObj;
+
+                    // Check if it's already in YYYY-MM-DD format
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(data.extracted_data.date)) {
+                        formattedDate = data.extracted_data.date;
+                        console.log(`Date already in correct format: ${formattedDate}`);
+                    } else {
+                        // Add time part to ensure correct timezone handling
+                        const dateStr = data.extracted_data.date + 'T00:00:00Z'; // Add Z to ensure UTC
+                        dateObj = new Date(dateStr);
+
+                        if (!isNaN(dateObj.getTime())) {
+                            // Use YYYY-MM-DD format for the input
+                            // Use UTC methods to avoid timezone issues
+                            const year = dateObj.getUTCFullYear();
+                            const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+                            const day = String(dateObj.getUTCDate()).padStart(2, '0');
+                            formattedDate = `${year}-${month}-${day}`;
+
+                            console.log(`Parsed date from backend: ${data.extracted_data.date} -> ${formattedDate}`);
+                        } else {
+                            console.error(`Invalid date from backend: ${data.extracted_data.date}`);
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error formatting date:", e);
+                    formattedDate = '';
+                }
+            }
+
+            // Set today's date as default if no date is provided
+            const today = new Date();
+            const todayFormatted = today.toISOString().split('T')[0]; // YYYY-MM-DD format
+
+            // Create a modified OCR result with the properly formatted date
+            const modifiedData = {
+                ...data,
+                extracted_data: {
+                    ...data.extracted_data,
+                    date: formattedDate || todayFormatted
+                }
+            };
+
+            // Set the OCR result with the properly formatted date
+            setOcrResult(modifiedData);
+            console.log("Setting OCR result:", modifiedData);
+
+            // Initialize with empty values - SplitViewForm will populate these one by one
+            // Important: We need to set the ID so the form knows which expense to update
             setOcrFormData({
                 id: data.expense_id,
-                date: data.extracted_data.date ?? '',
-                merchant_name: data.extracted_data.merchant_name ?? '',
-                amount: data.extracted_data.amount ?? '',
-                currency: data.extracted_data.currency ?? 'NPR',
+                date: '',
+                merchant_name: '',
+                amount: '',
+                currency: 'NPR',
                 category: null
             });
+
+            // Log the form data for debugging
+            console.log("Initial form data set:", {
+                id: data.expense_id,
+                date: '',
+                merchant_name: '',
+                amount: '',
+                currency: 'NPR',
+                category: null
+            });
+
+            // For the enhanced scanning experience, we keep the scanning dialog open
+            // and show the results there instead of opening a separate dialog
             setIsOcrMode(true);
-            setIsAddExpenseOpen(true);
             setOcrError(null);
             if (fileInputRef.current) fileInputRef.current.value = "";
         },
         onError: (error) => {
             console.error("OCR Upload Error:", error);
-            const errorMsg = axios.isAxiosError(error) 
-                ? error.response?.data?.detail || error.message 
+
+            // Check if this is a validation error with an expense ID
+            if (axios.isAxiosError(error) &&
+                error.response?.status === 422 &&
+                typeof error.response.data?.detail === 'object' &&
+                error.response.data.detail.expense_id) {
+
+                // This is a special case where the expense was created but validation failed
+                const detail = error.response.data.detail;
+                console.log("Expense created but validation failed:", detail);
+
+                // Show a toast notification
+                toast.info(detail.message || "OCR processing completed with some issues. The expense has been saved.");
+
+                // Refresh the expenses list to show the new expense
+                queryClient.invalidateQueries({ queryKey: ['expenses'] });
+
+                // Reset the form but keep the dialog open
+                if (fileInputRef.current) fileInputRef.current.value = "";
+                return;
+            }
+
+            // Handle normal errors
+            const errorMsg = axios.isAxiosError(error)
+                ? error.response?.data?.detail || error.message
                 : error.message;
-            toast.error(`OCR Failed: ${errorMsg}`);
-            setOcrError(errorMsg);
+
+            // If errorMsg is an object, try to extract a message from it
+            const displayError = typeof errorMsg === 'object'
+                ? JSON.stringify(errorMsg)
+                : errorMsg;
+
+            toast.error(`OCR Failed: ${displayError}`);
+            setOcrError(displayError);
             setOcrResult(null);
             if (fileInputRef.current) fileInputRef.current.value = "";
         },
@@ -251,14 +358,43 @@ const ExpensesPage: React.FC = () => {
         onSuccess: () => {
             toast.success("Expense saved successfully!");
             queryClient.invalidateQueries({ queryKey: ['expenses'] });
+            // Reset the saving flag and close the modal
+            setIsSaving(false);
             closeModalAndReset();
         },
         onError: (error) => {
             console.error("Update Expense Error:", error);
-            const errorMsg = axios.isAxiosError(error) 
-                ? error.response?.data?.detail || error.message 
+            const errorMsg = axios.isAxiosError(error)
+                ? error.response?.data?.detail || error.message
                 : error.message;
             toast.error(`Save failed: ${errorMsg}`);
+            // Reset the saving flag on error
+            setIsSaving(false);
+        },
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: async (id: number) => {
+            const token = localStorage.getItem('accessToken');
+            if (!token) throw new Error('Authentication token not found.');
+
+            await axios.delete(`${API_BASE_URL}/api/expenses/${id}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+            return id;
+        },
+        onSuccess: (id) => {
+            toast.success("Expense deleted successfully!");
+            queryClient.invalidateQueries({ queryKey: ['expenses'] });
+        },
+        onError: (error) => {
+            console.error("Delete Expense Error:", error);
+            const errorMsg = axios.isAxiosError(error)
+                ? error.response?.data?.detail || error.message
+                : error.message;
+            toast.error(`Delete failed: ${errorMsg}`);
         },
     });
 
@@ -287,13 +423,17 @@ const ExpensesPage: React.FC = () => {
     const triggerFileInput = () => {
         fileInputRef.current?.click();
     };
-    
+
     const handleOcrFormChange = (field: keyof Partial<Expense>, value: any) => {
+        console.log(`Updating form field: ${field} with value:`, value);
         setOcrFormData(produce((draft: Partial<Expense>) => {
             (draft as any)[field] = value;
         }));
     };
-     
+
+    // Add a state to track if we're saving the expense
+    const [isSaving, setIsSaving] = useState(false);
+
     const handleSaveOcrExpense = () => {
         if (!ocrResult?.expense_id) {
             toast.error("Error: Missing OCR result or expense ID.");
@@ -303,7 +443,7 @@ const ExpensesPage: React.FC = () => {
             toast.error("Please select a category.");
             return;
         }
-        
+
         const amountStr = String(ocrFormData.amount).trim();
         const amountNum = parseFloat(amountStr);
         if (isNaN(amountNum) || amountNum <= 0) {
@@ -339,7 +479,7 @@ const ExpensesPage: React.FC = () => {
             toast.error("Date is required and must be in YYYY-MM-DD or MM/DD/YYYY format.");
             return;
         }
-        
+
         interface FinalUpdateData {
             merchant_name: string | null;
             date: string;
@@ -356,15 +496,66 @@ const ExpensesPage: React.FC = () => {
         };
 
         console.log("Sending update data:", finalUpdateData);
+
+        // Set the saving flag to true to prevent confirmation dialog
+        setIsSaving(true);
+
+        // Update the expense
         updateMutation.mutate({ id: ocrResult.expense_id, data: finalUpdateData });
     };
 
+    // Function to delete an expense by ID when closing the OCR form
+    // This is a silent delete without notifications
+    const deleteExpense = async (id: number) => {
+        try {
+            const token = localStorage.getItem('accessToken');
+            if (!token) throw new Error('Authentication token not found.');
+
+            await axios.delete(`${API_BASE_URL}/api/expenses/${id}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+            console.log(`Expense ${id} deleted successfully`);
+        } catch (error) {
+            console.error(`Failed to delete expense ${id}:`, error);
+            // We don't show an error toast here to avoid confusing the user
+            // when they close the form
+        }
+    };
+
     const closeModalAndReset = () => {
+        // If we have an OCR result with an expense ID and we're in OCR mode,
+        // confirm with the user before discarding
+        if (isOcrMode && ocrResult?.expense_id && !isSaving) {
+            // Only show confirmation if we're in OCR mode with data and not saving
+            const hasUserEnteredData =
+                ocrFormData.category ||
+                (ocrFormData.merchant_name && ocrFormData.merchant_name !== ocrResult.extracted_data.merchant_name) ||
+                (ocrFormData.amount && ocrFormData.amount !== ocrResult.extracted_data.amount);
+
+            if (hasUserEnteredData) {
+                const confirmClose = window.confirm(
+                    "Are you sure you want to close? Your scanned expense will be discarded."
+                );
+                if (!confirmClose) {
+                    return; // User canceled, don't close
+                }
+            }
+
+            // Delete the expense from the database if we're not saving
+            if (!isSaving) {
+                deleteExpense(ocrResult.expense_id);
+            }
+        }
+
         setIsAddExpenseOpen(false);
+        setIsScanDialogOpen(false); // Also close the scanning dialog
         setIsOcrMode(false);
         setOcrResult(null);
         setOcrFormData({});
         setOcrError(null);
+        setIsSaving(false); // Reset the saving flag
         if (fileInputRef.current) fileInputRef.current.value = "";
     };
 
@@ -372,7 +563,13 @@ const ExpensesPage: React.FC = () => {
         closeModalAndReset();
         queryClient.invalidateQueries({ queryKey: ['expenses'] });
     };
-  
+
+    const handleDeleteExpense = (id: number) => {
+        if (window.confirm("Are you sure you want to delete this expense? This action cannot be undone.")) {
+            deleteMutation.mutate(id);
+        }
+    };
+
   return (
         <div className="space-y-6 container mx-auto py-8">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -381,28 +578,81 @@ const ExpensesPage: React.FC = () => {
                     <p className="text-muted-foreground">Manage and view your expenses</p>
                 </div>
                 <div className="flex gap-2">
-                    <input 
+                    <input
                         type="file"
                         ref={fileInputRef}
                         onChange={handleFileChange}
                         accept="image/jpeg, image/png, image/webp"
-                        style={{ display: 'none' }} 
+                        style={{ display: 'none' }}
                         disabled={isLoadingOcr}
                     />
-                    <Button onClick={triggerFileInput} disabled={isLoadingOcr || isFetching}>
+                    <Button onClick={() => setIsScanDialogOpen(true)} disabled={isLoadingOcr || isFetching}>
                         <ScanLine className="mr-2 h-4 w-4" />
                         {isLoadingOcr ? "Processing..." : "Scan Receipt"}
                     </Button>
-                    <Dialog open={isAddExpenseOpen} onOpenChange={(isOpen) => { if (!isOpen) closeModalAndReset(); else setIsAddExpenseOpen(true); }}>
+                    <Dialog
+                        open={isAddExpenseOpen}
+                        onOpenChange={(isOpen) => {
+                        if (!isOpen) {
+                            // Don't close if we're in the process of saving
+                            if (isSaving) {
+                                return;
+                            }
+                            // When dialog is closing, handle it properly
+                            closeModalAndReset();
+                        } else {
+                            setIsAddExpenseOpen(true);
+                        }
+                    }}>
       <DialogTrigger asChild>
-                            <Button onClick={() => { setIsOcrMode(false); setOcrResult(null); setOcrFormData({}); }} disabled={isFetching || isLoadingOcr}> 
+                            <Button onClick={() => { setIsOcrMode(false); setOcrResult(null); setOcrFormData({}); }} disabled={isFetching || isLoadingOcr}>
           <Plus className="mr-2 h-4 w-4" />
                                 Add Manually
         </Button>
       </DialogTrigger>
-                        <DialogContent className="sm:max-w-[425px]">
+                        <DialogContent className="sm:max-w-[425px]" onEscapeKeyDown={(e) => {
+                            // Prevent default to stop automatic closing
+                            e.preventDefault();
+
+                            // Don't show confirmation if we're in the process of saving
+                            if (isSaving) {
+                                return;
+                            }
+
+                            // Only close if user confirms
+                            if (isOcrMode && ocrResult?.expense_id) {
+                                const confirmClose = window.confirm(
+                                    "Are you sure you want to close? Your scanned expense will be discarded."
+                                );
+                                if (confirmClose) {
+                                    closeModalAndReset();
+                                }
+                            } else {
+                                closeModalAndReset();
+                            }
+                        }} onInteractOutside={(e) => {
+                            // Prevent default to stop automatic closing
+                            e.preventDefault();
+
+                            // Don't show confirmation if we're in the process of saving
+                            if (isSaving) {
+                                return;
+                            }
+
+                            // Only close if user confirms
+                            if (isOcrMode && ocrResult?.expense_id) {
+                                const confirmClose = window.confirm(
+                                    "Are you sure you want to close? Your scanned expense will be discarded."
+                                );
+                                if (confirmClose) {
+                                    closeModalAndReset();
+                                }
+                            } else {
+                                closeModalAndReset();
+                            }
+                        }}>
                             {isOcrMode && ocrResult ? (
-                                <> 
+                                <>
             <DialogHeader>
                                         <DialogTitle>Review Scanned Expense</DialogTitle>
               <DialogDescription>
@@ -426,7 +676,7 @@ const ExpensesPage: React.FC = () => {
               <div className="grid grid-cols-4 items-center gap-4">
                                             <Label htmlFor="ocr-category" className="text-right">Category*</Label>
                                             <Select
-                                                value={ocrFormData.category || undefined} 
+                                                value={ocrFormData.category || undefined}
                                                 onValueChange={(value) => handleOcrFormChange('category', value)}
                                                 required
                                             >
@@ -441,24 +691,35 @@ const ExpensesPage: React.FC = () => {
                 </Select>
               </div>
             </div>
-                                    <Button 
-                                        onClick={handleSaveOcrExpense} 
-                                        disabled={updateMutation.isPending}
-                                        className="w-full mt-4"
-                                    >
-                                        {updateMutation.isPending ? "Saving..." : "Save Expense"}
-                                    </Button>
-                                </> 
+                                    <div className="flex gap-2 mt-4">
+                                        <Button
+                                            onClick={closeModalAndReset}
+                                            variant="outline"
+                                            type="button"
+                                            className="flex-1"
+                                            disabled={updateMutation.isPending}
+                                        >
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            onClick={handleSaveOcrExpense}
+                                            disabled={updateMutation.isPending}
+                                            className="flex-1"
+                                        >
+                                            {updateMutation.isPending ? "Saving..." : "Save Expense"}
+                                        </Button>
+                                    </div>
+                                </>
                             ) : (
-                                <> 
+                                <>
             <DialogHeader>
                                         <DialogTitle>Add Manual Expense</DialogTitle>
               <DialogDescription>
                                             Fill in the details for your new expense.
               </DialogDescription>
             </DialogHeader>
-                                    <AddExpenseForm 
-                                        onSuccess={handleManualAddSuccess} 
+                                    <AddExpenseForm
+                                        onSuccess={handleManualAddSuccess}
                                         onCancel={closeModalAndReset}
                                     />
                                 </>
@@ -468,15 +729,39 @@ const ExpensesPage: React.FC = () => {
               </div>
             </div>
 
+            {/* Enhanced Scanning Dialog */}
+            <ScanningDialog
+                open={isScanDialogOpen}
+                onOpenChange={(isOpen) => {
+                    if (!isOpen && !isLoadingOcr) {
+                        setIsScanDialogOpen(false);
+                    }
+                }}
+                onFileAccepted={(file) => {
+                    setIsLoadingOcr(true);
+                    setOcrError(null);
+                    setOcrResult(null);
+                    ocrMutation.mutate(file);
+                }}
+                isLoadingOcr={isLoadingOcr}
+                ocrResult={ocrResult}
+                ocrError={ocrError}
+                ocrFormData={ocrFormData}
+                onOcrFormChange={handleOcrFormChange}
+                onSaveOcrExpense={handleSaveOcrExpense}
+                onCancel={closeModalAndReset}
+                isSaving={isSaving}
+            />
+
             <div className="border rounded-lg overflow-hidden">
                 {isLoading && <p className="p-4 text-center">Loading expenses...</p>}
                 {!isLoading && error && <p className="p-4 text-red-500 text-center">Error fetching expenses: {error.message}</p>}
-                
+
                 {!error && (
                     <Table>
                         <TableCaption className="py-4">
-                            {isLoading ? "Loading..." : 
-                             expenses.length === 0 
+                            {isLoading ? "Loading..." :
+                             expenses.length === 0
                                 ? "No expenses recorded yet. Click 'Add New Expense' to start."
                                 : "A list of your recent expenses."
                             }
@@ -487,22 +772,23 @@ const ExpensesPage: React.FC = () => {
                                 <TableHead>Merchant</TableHead>
                                 <TableHead>Category</TableHead>
                                 <TableHead className="text-right">Amount</TableHead>
+                                <TableHead className="w-[80px]">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {!isLoading && expenses.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={4} className="h-24 text-center">
+                                    <TableCell colSpan={5} className="h-24 text-center">
                                         No expenses found.
                                     </TableCell>
                                 </TableRow>
                             ) : (
                                 expenses.map((exp) => {
                                     const numericAmount = parseFloat(exp.amount as string);
-                                    const displayAmount = !isNaN(numericAmount) 
-                                        ? numericAmount.toFixed(2) 
+                                    const displayAmount = !isNaN(numericAmount)
+                                        ? numericAmount.toFixed(2)
                                         : 'N/A';
-  
+
   return (
                                         <TableRow key={exp.id}>
                                             <TableCell>{exp.date ? format(new Date(exp.date), 'PPP') : 'N/A'}</TableCell>
@@ -510,6 +796,18 @@ const ExpensesPage: React.FC = () => {
                                             <TableCell>{exp.category || 'N/A'}</TableCell>
                                             <TableCell className="text-right">
                                                 {exp.currency} {displayAmount}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={() => handleDeleteExpense(exp.id)}
+                                                    title="Delete expense"
+                                                    className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-100"
+                                                    disabled={deleteMutation.isPending}
+                                                >
+                                                    <Trash className="h-4 w-4" />
+                                                </Button>
                                             </TableCell>
                                         </TableRow>
                                     );

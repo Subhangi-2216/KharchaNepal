@@ -60,9 +60,12 @@ async def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Create JWT token
+    # Create JWT token with user_id included
     access_token = auth_service.create_access_token(
-        data={"sub": user.email} # Use email as subject in JWT
+        data={
+            "sub": user.email,  # Use email as subject in JWT
+            "user_id": user.id  # Include user_id for frontend use
+        }
     )
 
     return {"access_token": access_token, "token_type": "bearer"}

@@ -17,7 +17,7 @@ class ExpenseBase(BaseModel):
 # Schema for creating an expense (used by manual entry and potentially PUT)
 class ExpenseCreate(ExpenseBase):
     # Category is required for manual creation
-    category: CategoryEnum 
+    category: CategoryEnum
 
 # Schema for updating an expense (used by PUT /expenses/{id} after OCR)
 class ExpenseUpdate(BaseModel):
@@ -45,12 +45,15 @@ class ExpenseInDB(ExpenseBase):
 class ExtractedData(BaseModel):
     # Fields that OCR attempts to extract
     date: Optional[date] = None
+    date_confidence: Optional[float] = None  # Confidence score for date extraction (0.0-1.0)
     merchant_name: Optional[str] = None
+    merchant_confidence: Optional[float] = None  # For future use
     amount: Optional[Decimal] = None
+    amount_confidence: Optional[float] = None  # For future use
     currency: Optional[str] = "NPR"
 
 class ExpenseOCRResponse(BaseModel):
     expense_id: int # ID of the partially created expense
     extracted_data: ExtractedData
     missing_fields: List[str] # Fields OCR couldn't find (e.g., ["date", "amount", "category"])
-    message: str 
+    message: str

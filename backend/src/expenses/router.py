@@ -77,7 +77,7 @@ async def create_expense_manual(
             detail="Could not create expense."
         )
 
-@router.post("/ocr", response_model=ExpenseOCRResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/ocr", status_code=status.HTTP_201_CREATED)
 async def create_expense_ocr(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
@@ -107,7 +107,7 @@ async def create_expense_ocr(
                 detail=f"File too large after reading. Max size: {MAX_FILE_SIZE_BYTES // 1024 // 1024}MB"
             )
     except Exception as e:
-        print(f"Error reading uploaded file: {e}")
+        logging.error(f"Error reading uploaded file: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not read uploaded file.")
     finally:
          await file.close()
@@ -116,99 +116,147 @@ async def create_expense_ocr(
     ocr_raw_text = ""
     extracted_dict = {}
     try:
+        # Process image with OCR using enhanced preprocessing
+        logging.info("Starting OCR processing with preprocessing...")
         ocr_raw_text = process_image_with_ocr(image_bytes)
+
         if not ocr_raw_text:
-            # Handle case where OCR itself failed or returned empty
-            print("OCR processing returned no text.")
-            # We might still proceed to save an entry with only raw text, or raise error
-            # Let's proceed and indicate all fields are missing in response
+            logging.warning("OCR processing returned no text.")
+            # We'll proceed but all fields will be missing in the response
+        else:
+            logging.info(f"OCR text extracted successfully ({len(ocr_raw_text)} characters)")
 
+        # Parse the OCR text to extract structured data
         extracted_dict = parse_ocr_text(ocr_raw_text)
-    except Exception as e:
-        # Catch errors from OCR service itself
-        print(f"Error during OCR/Parsing service call: {e}")
-        # Proceed but expect most fields to be missing
-        pass # extracted_dict remains empty or partially filled
+        logging.info(f"Extracted data: {extracted_dict}")
 
-    # 4. Save Partial Expense to DB
+    except Exception as e:
+        logging.error(f"Error during OCR/Parsing service call: {e}", exc_info=True)
+        # We'll proceed but expect most fields to be missing
+        extracted_dict = {}
+
+    # 4. Check if mandatory 'amount' was extracted
+    if extracted_dict.get('amount') is None:
+        logging.warning("OCR failed to extract the mandatory 'amount' field")
+
+        # Prepare response with extracted data but indicate failure
+        missing_fields = ['category']  # Category is always missing initially
+        extracted_data_response = ExtractedData(**extracted_dict)
+
+        # Check which fields are missing
+        if extracted_data_response.date is None: missing_fields.append('date')
+        if extracted_data_response.merchant_name is None: missing_fields.append('merchant_name')
+        missing_fields.append('amount')  # Amount is definitely missing
+
+        # Return 400 Bad Request with the extracted data in the error detail
+        # This allows the frontend to still use the partial data
+        error_response = {
+            "detail": "OCR failed to extract the mandatory 'amount' field. Please update manually.",
+            "extracted_data": extracted_dict,
+            "missing_fields": list(set(missing_fields))
+        }
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_response
+        )
+
+    # 5. Save Expense to DB (only if amount was found)
     try:
-        # Prepare partial expense data
-        # Use extracted values if present, otherwise default to None or a sensible default
-        # Important: Ensure date is present, maybe default to today if not found?
-        expense_date = extracted_dict.get('date') or date.today() # Default to today if OCR fails
+        # Prepare expense data
+        # Validate the date - if it's unrealistic, use today's date
+        extracted_date = extracted_dict.get('date')
+        current_year = date.today().year
+
+        # Define valid year range (matching OCR service)
+        min_valid_year = current_year - 20  # Allow receipts from up to 20 years ago
+        max_valid_year = current_year + 1   # Allow receipts dated slightly in the future
+
+        # Check if date is realistic (using same range as OCR service)
+        if extracted_date and (extracted_date.year < min_valid_year or extracted_date.year > max_valid_year):
+            logging.warning(f"Unrealistic date detected from OCR: {extracted_date}. Using today's date instead.")
+            expense_date = date.today()
+            # Remove the invalid date from extracted_dict so it won't be used in the response
+            extracted_dict['date'] = None
+        elif extracted_date and extracted_date > date.today() and (extracted_date - date.today()).days > 7:
+            # If date is more than a week in the future, it's likely an error
+            logging.warning(f"Future date detected from OCR: {extracted_date}. Using today's date instead.")
+            expense_date = date.today()
+            # Remove the invalid date from extracted_dict so it won't be used in the response
+            extracted_dict['date'] = None
+        else:
+            # Use the extracted date if available, otherwise use today's date
+            expense_date = extracted_date or date.today()
+
+            # If the date confidence is very low, mark it as missing in the response
+            if extracted_dict.get('date_confidence', 0) < 0.2 and extracted_date is not None:
+                logging.info(f"Low confidence date detected: {extracted_date} (confidence: {extracted_dict.get('date_confidence')})")
+                # Keep the date for the database but mark it as missing in the response
+                extracted_dict['date'] = None
 
         expense_data_for_db = {
             "user_id": current_user.id,
             "date": expense_date,
             "merchant_name": extracted_dict.get('merchant_name'),
-            "amount": extracted_dict.get('amount'),
-            "currency": extracted_dict.get('currency', 'NPR'), # Default currency
-            "category": None, # Category must be set later
+            "amount": extracted_dict.get('amount'),  # We know this is not None at this point
+            "currency": extracted_dict.get('currency', 'NPR'),  # Default currency
+            "category": None,  # Category must be set later
             "is_ocr_entry": True,
             "ocr_raw_text": ocr_raw_text
         }
 
-        # Amount is required by model, handle if not found by OCR
-        if expense_data_for_db['amount'] is None:
-            # Option 1: Raise error - force user to provide amount
-             # raise HTTPException(status_code=400, detail="Could not extract amount from receipt. Please enter manually.")
-             # Option 2: Save with a placeholder (e.g., 0) - might be confusing
-             # expense_data_for_db['amount'] = Decimal('0.00')
-             # For now, let's allow saving without amount, relying on PUT to fix.
-             # **Correction**: The model likely requires amount. Let's raise error if not found.
-             # Reverting to raising error as it's safer. User MUST provide amount later via PUT.
-             print("OCR could not extract amount.") # Log it
-             # We will indicate amount is missing in the response, but won't save yet.
-             # Instead of saving partially, let's just return the extracted data
-             # and let frontend decide how to handle missing mandatory fields (like amount) before PUT.
-
-             # --- REVISED LOGIC: Don't save yet, return extracted data ---
-             missing_fields = ['category'] # Category is always missing initially
-             extracted_data_response = ExtractedData(**extracted_dict)
-             if extracted_data_response.date is None: missing_fields.append('date')
-             if extracted_data_response.merchant_name is None: missing_fields.append('merchant_name')
-             if extracted_data_response.amount is None: missing_fields.append('amount')
-
-             # Cannot create expense if mandatory fields like amount are missing. Return failure.
-             # Let's modify the response to indicate failure but still provide data
-             # Maybe use 200 OK but with an error message and no expense_id?
-             # Or stick to the plan: Save partially *if* mandatory fields are present?
-             # Let's stick to PRD plan: Save partially, return ID, require PUT
-             # BUT amount is required by DB model. We MUST have an amount.
-             # If OCR fails amount, we cannot proceed with saving.
-             raise HTTPException(
-                 status_code=status.HTTP_400_BAD_REQUEST,
-                 detail="OCR failed to extract the mandatory 'amount' field. Cannot create expense entry automatically."
-             )
-             # --- End of revised logic attempt ---
-
-        # Original Logic: Save partially (assuming amount was found)
+        # Create the expense but don't commit yet
         expense = Expense(**expense_data_for_db)
         db.add(expense)
+
+        # We'll commit after creating the response, so we can rollback if needed
+        # This allows for proper cancellation if the user decides not to proceed
+        await db.flush()  # This assigns an ID but doesn't commit
+
+        logging.info(f"Expense created with ID: {expense.id} (not committed yet)")
+
+        # 6. Construct Response
+        missing_fields = ['category']  # Category is always missing initially
+
+        # Check which fields might be missing before creating the response object
+        if extracted_dict.get('date') is None:
+            missing_fields.append('date')
+        if extracted_dict.get('merchant_name') is None:
+            missing_fields.append('merchant_name')
+
+        # Log the extracted data for debugging
+        logging.info(f"Extracted data: {extracted_dict}")
+        logging.info(f"Expense saved with ID: {expense.id}, date: {expense.date}, amount: {expense.amount}")
+
+        # Prepare the response with confidence scores
+        response_data = {
+            "expense_id": expense.id,
+            "extracted_data": {
+                "merchant_name": expense.merchant_name,
+                "merchant_confidence": extracted_dict.get('merchant_confidence', 0.5),  # Default confidence if not provided
+                "date": expense.date.isoformat() if expense.date else None,
+                "date_confidence": extracted_dict.get('date_confidence', 0.5),  # Default confidence if not provided
+                "amount": float(expense.amount) if expense.amount else None,
+                "amount_confidence": extracted_dict.get('amount_confidence', 0.5),  # Default confidence if not provided
+                "currency": expense.currency,
+            },
+            "missing_fields": list(set(missing_fields)),  # Ensure unique
+            "message": "OCR processing complete. Please verify details and select a category."
+        }
+
+        # Now that we have a valid response, commit the transaction
         await db.commit()
-        await db.refresh(expense)
+        logging.info(f"Expense committed to database with ID: {expense.id}")
 
-        # 5. Construct Response
-        missing_fields = ['category'] # Always missing initially
-        extracted_data_for_resp = ExtractedData(**extracted_dict)
-        # Check other fields that might be missing from parsing
-        if extracted_data_for_resp.date is None: missing_fields.append('date') # Should have default though
-        if extracted_data_for_resp.merchant_name is None: missing_fields.append('merchant_name')
-        # Amount check already happened
-
-        return ExpenseOCRResponse(
-            expense_id=expense.id,
-            extracted_data=extracted_data_for_resp,
-            missing_fields=list(set(missing_fields)), # Ensure unique
-            message="OCR processing complete. Please verify details and select a category."
-        )
+        return response_data
 
     except HTTPException as e:
-         await db.rollback() # Rollback if HTTP exception occurred during process
-         raise e # Re-raise HTTP exceptions (like validation, amount not found)
+        await db.rollback()  # Rollback if HTTP exception occurred during process
+        raise e  # Re-raise HTTP exceptions
+
     except Exception as e:
         await db.rollback()
-        print(f"Error saving OCR expense: {e}")
+        logging.error(f"Error saving OCR expense: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to process OCR request and save expense."
@@ -311,3 +359,14 @@ async def delete_expense(
         )
 
     return # Return None for 204
+
+@router.get("/has_any", response_model=bool)
+async def has_any_expenses(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Checks if the user has any expenses."""
+    stmt = select(Expense).where(Expense.user_id == current_user.id).limit(1)
+    result = await db.execute(stmt)
+    has_expenses = result.scalar_one_or_none() is not None
+    return has_expenses
