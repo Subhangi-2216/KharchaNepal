@@ -1,4 +1,4 @@
-import React, { useState, useRef, ChangeEvent } from 'react';
+import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import axios from 'axios';
 import { format } from 'date-fns';
@@ -31,32 +31,75 @@ import { Plus, Search, MessageSquare, ChevronDown, ChevronUp, Send, Upload, File
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = ''; // This will use the same origin and proxy through Vite
 
 function ExpenseQueryChatbot() {
+  const { token } = useAuth();
   const [isExpanded, setIsExpanded] = useState(false);
   const [messages, setMessages] = useState([
     { role: "system", content: "Hello! I'm your Expense Query Assistant. Ask me about your expenses or tell me to add a new one." }
   ]);
   const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const handleSendMessage = () => {
-    if (!input.trim()) return;
-    const newMessages = [...messages, { role: "user" as const, content: input }];
-    setMessages(newMessages);
-
-    setTimeout(() => {
-      let botResponse = "I'm not sure how to answer that query yet.";
-      if (input.toLowerCase().includes("how much") && input.toLowerCase().includes("food")) {
-        botResponse = "Based on current data, you seem to have spent X on Food this month (Note: Real-time query needed).";
-      } else if (input.toLowerCase().includes("add") && input.toLowerCase().includes("expense")) {
-        botResponse = "To add an expense, please use the 'Add New Expense' button.";
+  // Scroll to bottom of messages when new ones are added
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      const chatContainer = messagesEndRef.current.parentElement;
+      if (chatContainer) {
+        chatContainer.scrollTop = chatContainer.scrollHeight;
       }
-      setMessages(prev => [...prev, { role: "system" as const, content: botResponse }]);
-    }, 500);
+    }
+  }, [messages]);
 
+  const handleSendMessage = async () => {
+    const userQuery = input.trim();
+    if (!userQuery || isLoading) return;
+
+    const newUserMessage = { role: "user" as const, content: userQuery };
+    setMessages(prev => [...prev, newUserMessage]);
     setInput("");
+    setIsLoading(true);
+
+    try {
+      const apiUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000') + '/api/chatbot/query';
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ query: userQuery })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error from chatbot API' }));
+        throw new Error(errorData.detail || `Error: ${response.status}`);
+      }
+
+      const botResponseData = await response.json();
+      const newSystemMessage = { role: "system" as const, content: botResponseData.data };
+
+      // Add a small delay to make the response feel more natural
+      setTimeout(() => {
+        setMessages(prev => [...prev, newSystemMessage]);
+        setIsLoading(false);
+      }, 500);
+
+    } catch (error: any) {
+      console.error("Expense Chatbot Error:", error);
+      toast.error(`Chatbot error: ${error.message}`);
+      const errorSystemMessage = {
+        role: "system" as const,
+        content: "Sorry, I encountered an error processing your request. Please try again or contact support if the issue persists."
+      };
+      setMessages(prev => [...prev, errorSystemMessage]);
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -88,24 +131,73 @@ function ExpenseQueryChatbot() {
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 {messages.map((msg, idx) => (
                   <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[80%] rounded-lg px-4 py-2 ${ msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted" }`}>
+                    {msg.role === "system" && (
+                      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center mr-2">
+                        <Send className="h-4 w-4 text-primary" />
+                      </div>
+                    )}
+                    <div className={`max-w-[80%] rounded-lg px-4 py-2 ${ msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted/50 border border-border/40" }`}>
                       {msg.content}
                     </div>
                   </div>
                 ))}
+                {isLoading && (
+                  <div className="flex justify-start">
+                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center mr-2">
+                      <Send className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="max-w-[80%] rounded-lg px-4 py-3 bg-muted/50 border border-border/40">
+                      <div className="flex space-x-2">
+                        <div className="h-2 w-2 rounded-full bg-muted-foreground/30 animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                        <div className="h-2 w-2 rounded-full bg-muted-foreground/30 animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                        <div className="h-2 w-2 rounded-full bg-muted-foreground/30 animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
               </div>
+              {messages.length === 1 && !isLoading && (
+                <div className="px-4 pb-2">
+                  <p className="text-xs text-muted-foreground mb-2">Try asking:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      "How much did I spend on food last month?",
+                      "Show me my recent expenses",
+                      "Add a new expense of 500 NPR for lunch",
+                      "What are my total expenses this month?"
+                    ].map((question, idx) => (
+                      <Button
+                        key={idx}
+                        variant="outline"
+                        size="sm"
+                        className="text-xs"
+                        onClick={() => {
+                          setInput(question);
+                          setTimeout(() => handleSendMessage(), 100);
+                        }}
+                      >
+                        {question}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="p-4 border-t flex">
                 <Input
                   placeholder="Ask about your expenses..."
                   className="flex-1"
                   value={input}
                   onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleSendMessage()}
+                  onKeyDown={e => e.key === "Enter" && !isLoading && handleSendMessage()}
+                  disabled={isLoading}
                 />
                 <Button
                   className="ml-2"
                   size="icon"
                   onClick={handleSendMessage}
+                  disabled={isLoading}
                 >
                   <Send className="h-4 w-4" />
                 </Button>

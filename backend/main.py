@@ -30,6 +30,26 @@ from src.user_settings.router import router as user_settings_router
 
 app = FastAPI(title="Kharcha Nepal Tracker API")
 
+# CORS Configuration - Move this to the top before any other middleware
+# Adjust origins based on your frontend URL(s)
+origins = [
+    "http://localhost:5173",  # Default Vite dev server port
+    "http://localhost:8080",  # Port specified in your vite.config.ts
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:8080",
+    "*",  # Allow all origins temporarily for testing
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],  # Explicitly list all methods
+    allow_headers=["*"],  # Allows all headers
+    expose_headers=["*"],  # Expose all headers
+    max_age=86400,  # Cache preflight requests for 24 hours
+)
+
 # --- Custom Exception Handler for Validation Errors ---
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
@@ -50,23 +70,18 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 # Example: A file at 'uploads/profile_images/img.jpg' will be accessible at 'http://localhost:8000/uploads/profile_images/img.jpg'
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR_BASE), name="uploads")
 
-# CORS Configuration
-# Adjust origins based on your frontend URL(s)
-origins = [
-    "http://localhost:5173", # Default Vite dev server port
-    "http://localhost:8080", # Port specified in your vite.config.ts
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:8080",
-    # Add your production frontend URL here if applicable
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"], # Allows all methods
-    allow_headers=["*"], # Allows all headers
-)
+# Add a middleware to log all requests for debugging
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    # Log the request details
+    logging.info(f"Request: {request.method} {request.url}")
+    # Process the request and get the response
+    response = await call_next(request)
+    # Add CORS headers to all responses
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    # Log the response status
+    logging.info(f"Response status: {response.status_code}")
+    return response
 
 # Include routers
 app.include_router(auth_router)

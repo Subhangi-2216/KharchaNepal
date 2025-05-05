@@ -33,13 +33,18 @@ def process_image_with_ocr(image_bytes: bytes) -> str:
         # Apply preprocessing steps
         processed_img = preprocessing.grayscale(img_cv)
         processed_img = preprocessing.resize_image(processed_img)
+        # Denoise before thresholding
         processed_img = preprocessing.denoise(processed_img)
+        # Disable deskewing - seems to negatively affect this bill
+        # processed_img = preprocessing.deskew(processed_img)
+        # Apply thresholding after denoising
         processed_img = preprocessing.threshold(processed_img)
 
         # Optional: Add more preprocessing steps based on testing results
-        # processed_img = preprocessing.deskew(processed_img)
+        # processed_img = preprocessing.deskew(processed_img) # Moved up
 
         # Perform OCR on the preprocessed image
+        # Revert back to PSM 6 as it was working before for this bill
         text = pytesseract.image_to_string(processed_img, config='--psm 6')
 
         # Log the extracted text for debugging
@@ -408,6 +413,11 @@ def enhanced_amount_extraction(text: str) -> Tuple[Optional[Decimal], float]:
     Returns:
         Tuple of (extracted amount or None, confidence score)
     """
+    # --- Start Added Debug Logging ---
+    logging.debug("--- enhanced_amount_extraction --- ")
+    logging.debug(f"Raw OCR Text Input:\n{text}")
+    # --- End Added Debug Logging ---
+
     # Process with spaCy
     doc = nlp(text)
 
@@ -418,16 +428,17 @@ def enhanced_amount_extraction(text: str) -> Tuple[Optional[Decimal], float]:
     # This is a more targeted approach for the final total amount
     total_patterns = [
         # More specific patterns first (with word boundaries and case insensitive)
-        r'(?i)Total\s*:\s*(?:Rs\.?|NPR)?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)',
-        r'(?i)Total\s*Amount\s*:\s*(?:Rs\.?|NPR)?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)',
-        r'(?i)Grand\s*Total\s*:\s*(?:Rs\.?|NPR)?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)',
-        r'(?i)Amount\s*Due\s*:\s*(?:Rs\.?|NPR)?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)',
-        r'(?i)Net\s*Amount\s*:\s*(?:Rs\.?|NPR)?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)',
+        # Added optional currency symbol like $ (with optional spaces) before the amount, ignore trailing comma
+        r'(?i)Total\s*:\s*(?:Rs\.?|NPR)?\s*\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?),?'
+        r'(?i)Total\s*Amount\s*:\s*(?:Rs\.?|NPR)?\s*\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?),?'
+        r'(?i)Grand\s*Total\s*:\s*(?:Rs\.?|NPR)?\s*\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?),?'
+        r'(?i)Amount\s*Due\s*:\s*(?:Rs\.?|NPR)?\s*\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?),?'
+        r'(?i)Net\s*Amount\s*:\s*(?:Rs\.?|NPR)?\s*\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?),?'
         # Additional patterns for different formats
-        r'(?i)Total\s*[^:]*?[: ]\s*(?:Rs\.?|NPR)?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)',
-        r'(?i)(?:^|\n)Total\s*(?:Rs\.?|NPR)?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)',
+        r'(?i)Total\s*[^:]*?[: ]\s*(?:Rs\.?|NPR)?\s*\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?),?'
+        r'(?i)(?:^|\n)Total\s*(?:Rs\.?|NPR)?\s*\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?),?'
         # Look for lines that just have "Total" and a number
-        r'(?i)(?:^|\n)\s*Total\s*[^:\n]*?(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)',
+        r'(?i)(?:^|\n)\s*Total\s*[^:\n]*?\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?),?'
     ]
 
     for pattern in total_patterns:
@@ -443,7 +454,8 @@ def enhanced_amount_extraction(text: str) -> Tuple[Optional[Decimal], float]:
                     continue
 
                 # High confidence for explicit total matches
-                confidence = 0.9
+                # Boost confidence significantly to prioritize these matches
+                confidence = 1.5
 
                 amount_candidates.append((amount, confidence, "explicit_total", amount_str))
                 logging.debug(f"Explicit TOTAL match: {amount} from '{amount_str}' (confidence: {confidence:.2f})")
@@ -496,9 +508,17 @@ def enhanced_amount_extraction(text: str) -> Tuple[Optional[Decimal], float]:
 
     # STRATEGY 2: Look for CARDINAL entities near total keywords
     total_keywords = ["total", "amount", "sum", "balance", "due", "grand", "payable"]
+    # Keywords indicating the number is likely NOT an amount
+    ignore_keywords = ["table", "order", "item", "server", "guest", "gst", "vat", "reg", "ac", "check", "chk", "inv", "rcpt", "tax id", "customer id"]
     for ent in doc.ents:
         if ent.label_ == "CARDINAL":
-            # Check if entity is near a total keyword
+            # Check context BEFORE the entity
+            pre_context = text[max(0, ent.start_char - 15):ent.start_char].lower()
+            if any(keyword in pre_context for keyword in ignore_keywords):
+                logging.debug(f"Skipping CARDINAL '{ent.text}' due to preceding ignore keyword in context: '{pre_context}'")
+                continue
+
+            # Check if entity is near a total keyword (context AFTER potentially included)
             context = text[max(0, ent.start_char - 30):min(len(text), ent.end_char + 30)].lower()
             if any(keyword in context for keyword in total_keywords):
                 clean_text = re.sub(r'[^\d.,]', '', ent.text)
@@ -581,40 +601,39 @@ def enhanced_amount_extraction(text: str) -> Tuple[Optional[Decimal], float]:
 
     # Return the amount with highest confidence, if any
     if amount_candidates:
-        # Log all candidates for debugging before sorting
-        if len(amount_candidates) > 1:
-            logging.debug(f"All amount candidates before sorting: {[(str(a[0]), a[1], a[2], a[3]) for a in amount_candidates]}")
+        logging.debug(f"Found {len(amount_candidates)} amount candidates before selection:")
+        for cand in amount_candidates:
+            logging.debug(f"  - Amount: {cand[0]}, Confidence: {cand[1]:.2f}, Method: {cand[2]}, Original: '{cand[3]}'")
 
-        # First, check if we have any explicit total matches with high confidence
-        explicit_totals = [c for c in amount_candidates if c[2] == "explicit_total" and c[1] >= 0.8]
-        if explicit_totals:
-            # If we have multiple explicit totals, prefer the one that appears later in the text
-            # (usually the final total comes after subtotal)
-            if len(explicit_totals) > 1:
-                # Sort by position in text (if we can determine it)
-                # For now, just use the last one as it's likely the final total
-                best_candidate = explicit_totals[-1]
-            else:
-                best_candidate = explicit_totals[0]
+        # --- Revised Selection Logic --- 
+        # 1. Prioritize candidates found by the 'explicit_total' method
+        explicit_total_candidates = [c for c in amount_candidates if c[2] == "explicit_total"]
 
-            logging.info(f"Selected explicit total candidate: {best_candidate[0]} from '{best_candidate[3]}' "
+        if explicit_total_candidates:
+            # If explicit totals found, choose the largest one among them
+            explicit_total_candidates.sort(key=lambda x: x[0], reverse=True) # Sort by amount descending
+            best_candidate = explicit_total_candidates[0]
+            logging.info(f"Selected best explicit total candidate: {best_candidate[0]} from '{best_candidate[3]}' "
                         f"(confidence: {best_candidate[1]:.2f}, method: {best_candidate[2]})")
-            return best_candidate[0], best_candidate[1]
+        else:
+            # 2. If no explicit totals, sort all candidates by confidence, then amount, and pick the best
+            logging.info("No explicit total candidates found, sorting all candidates by confidence/amount.")
+            amount_candidates.sort(key=lambda x: (x[1], x[0]), reverse=True) # Sort by confidence, then amount
+            best_candidate = amount_candidates[0]
+            logging.info(f"Selected best overall candidate (no explicit total): {best_candidate[0]} from '{best_candidate[3]}' "
+                        f"(confidence: {best_candidate[1]:.2f}, method: {best_candidate[2]})")
 
-        # If no explicit total with high confidence, sort by confidence first, then by position in text
-        # For receipts, the total amount usually appears after the subtotal
-        amount_candidates.sort(key=lambda x: (x[1], x[0]), reverse=True)
-        best_candidate = amount_candidates[0]
-        logging.info(f"Selected best amount candidate: {best_candidate[0]} from '{best_candidate[3]}' "
-                    f"(confidence: {best_candidate[1]:.2f}, method: {best_candidate[2]})")
+        # --- End Revised Selection Logic ---
 
-        # Log all candidates for debugging after sorting
+        # Log all candidates for debugging after sorting (optional, can be removed if logs are too verbose)
         if len(amount_candidates) > 1:
-            logging.debug(f"All amount candidates after sorting: {[(str(a[0]), a[1], a[2]) for a in amount_candidates]}")
+            logging.debug(f"All amount candidates (sorted by final criteria): {[(str(a[0]), a[1], a[2]) for a in amount_candidates]}")
 
+        logging.debug("--- end enhanced_amount_extraction ---")
         return best_candidate[0], best_candidate[1]
 
     logging.warning("No valid amount candidates found")
+    logging.debug("--- end enhanced_amount_extraction ---") # Add debug end here too
     return None, 0.0
 
 
@@ -1372,20 +1391,28 @@ def parse_ocr_text(text: str) -> Dict[str, Any]:
     final_merchant = merchant_result if merchant_confidence >= 0.3 else None
     final_amount = amount_result if amount_confidence >= 0.2 else None
 
+    # Clamp confidence scores to the range [0, 1] for frontend display
+    capped_date_confidence = max(0.0, min(1.0, date_confidence))
+    capped_merchant_confidence = max(0.0, min(1.0, merchant_confidence))
+    capped_amount_confidence = max(0.0, min(1.0, amount_confidence))
+
     extracted_data = {
         "date": date_result,
-        "date_confidence": date_confidence,
+        "date_confidence": capped_date_confidence,
         "merchant_name": final_merchant,
-        "merchant_confidence": merchant_confidence,
+        "merchant_confidence": capped_merchant_confidence,
         "amount": final_amount,
-        "amount_confidence": amount_confidence,
+        "amount_confidence": capped_amount_confidence,
         "currency": "NPR" # Assume NPR for now, could try parsing later
     }
 
-    # Log extraction results with confidence scores
-    logging.info(f"OCR Extraction Results: "
+    # Log extraction results (using original confidence before capping for debug purposes)
+    logging.info(f"OCR Extraction Results (Original Confidence): "
                 f"Date: {date_result} (confidence: {date_confidence:.2f}), "
                 f"Merchant: {final_merchant} (confidence: {merchant_confidence:.2f}), "
                 f"Amount: {final_amount} (confidence: {amount_confidence:.2f})")
+
+    # Log the capped confidence scores being returned
+    logging.debug(f"Returning capped confidence scores: Date={capped_date_confidence:.2f}, Merchant={capped_merchant_confidence:.2f}, Amount={capped_amount_confidence:.2f}")
 
     return extracted_data
