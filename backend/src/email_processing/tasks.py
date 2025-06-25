@@ -13,9 +13,13 @@ from src.ocr.service import process_image_with_ocr, parse_ocr_text
 from .email_parser import email_extractor
 from .gmail_service import gmail_service
 from .processing_rules import processing_rules
+from .thread_processor import ThreadProcessor
 from .logging_config import email_tasks_logger, log_email_processing_stats, log_extraction_results
 
 logger = email_tasks_logger
+
+# Initialize thread processor
+thread_processor = ThreadProcessor()
 
 
 def _build_financial_email_query(last_sync_at: Optional[datetime] = None) -> str:
@@ -30,9 +34,9 @@ def _build_financial_email_query(last_sync_at: Optional[datetime] = None) -> str
     """
     from datetime import timedelta
 
-    # Enhanced financial email patterns (more specific than before)
+    # Enhanced financial email patterns with comprehensive transaction alert keywords
     financial_patterns = [
-        # Bank and financial institution emails
+        # Bank and financial institution emails (enhanced)
         "from:bank",
         "from:nabilbank",
         "from:kumaribank",
@@ -41,6 +45,10 @@ def _build_financial_email_query(last_sync_at: Optional[datetime] = None) -> str
         "from:laxmibank",
         "from:primecommercialbank",
         "from:sunrisebank",
+        "from:himalayanbank",
+        "from:standardchartered",
+        "from:everestbank",
+        "from:bankofkathmandu",
 
         # E-wallet and payment services
         "from:esewa.com.np",
@@ -49,8 +57,11 @@ def _build_financial_email_query(last_sync_at: Optional[datetime] = None) -> str
         "from:fonepay.com",
         "from:paypal.com",
         "from:stripe.com",
+        "from:connectips",
+        "from:wise.com",
+        "from:remitly.com",
 
-        # Transaction-related subjects (more specific)
+        # Core transaction subjects
         "subject:payment",
         "subject:receipt",
         "subject:transaction",
@@ -58,6 +69,34 @@ def _build_financial_email_query(last_sync_at: Optional[datetime] = None) -> str
         "subject:bill",
         "subject:statement",
         "subject:confirmation",
+
+        # Transaction alert patterns (NEW - addressing user request)
+        "subject:\"transaction alert\"",
+        "subject:\"transaction notification\"",
+        "subject:\"payment alert\"",
+        "subject:\"account alert\"",
+        "subject:\"debit alert\"",
+        "subject:\"credit alert\"",
+        "subject:\"banking alert\"",
+        "subject:\"txn alert\"",
+
+        # Enhanced bank notification patterns
+        "subject:alert",
+        "subject:notification",
+        "subject:\"account activity\"",
+        "subject:\"balance update\"",
+        "subject:\"fund transfer\"",
+        "subject:\"money transfer\"",
+        "subject:\"card transaction\"",
+        "subject:\"atm transaction\"",
+        "subject:\"mobile banking\"",
+        "subject:\"internet banking\"",
+
+        # Amount and currency indicators
+        "subject:\"rs.\"",
+        "subject:\"npr\"",
+        "subject:\"rupees\"",
+        "subject:\"amount\"",
 
         # E-commerce and merchant emails
         "from:daraz.com.np",
@@ -144,13 +183,19 @@ def sync_gmail_messages(self, email_account_id: int) -> Dict[str, Any]:
             # Use last_successful_sync_at instead of last_sync_at for more reliable filtering
             query = _build_financial_email_query(email_account.last_successful_sync_at)
 
-            # Sync messages from Gmail using the service with increased limits
-            synced_messages = gmail_service.sync_messages_for_account(
+            # Use hybrid sync approach: both threads AND individual messages
+            # This ensures we capture conversations AND standalone financial emails
+            logger.info(f"Starting hybrid Gmail sync for account {email_account_id} with max_results=500")
+            synced_messages = gmail_service.sync_hybrid_for_account(
                 account_id=email_account_id,
                 db=db,
                 query=query,
-                max_results=500  # Increased from 50 to 500 (10x improvement)
+                max_results=500  # Split: 300 threads + 200 individual messages
             )
+
+            # Log detailed sync results
+            logger.info(f"Gmail sync completed for account {email_account_id}: "
+                       f"processed {len(synced_messages)} messages/threads")
 
             # Queue processing for new messages
             messages_queued = 0
@@ -459,6 +504,98 @@ def collect_daily_statistics(self) -> Dict[str, Any]:
             "message": str(exc),
             "timestamp": datetime.utcnow().isoformat()
         }
+
+
+@celery_app.task(bind=True, max_retries=3)
+def process_email_thread_for_transactions(self, thread_id: str) -> Dict[str, Any]:
+    """
+    Process an entire email thread for financial transaction extraction.
+    This ensures we capture all related messages in a conversation.
+
+    Args:
+        thread_id: Gmail thread ID to process
+
+    Returns:
+        Processing results including extracted transaction data
+    """
+    db = SessionLocal()
+    try:
+        logger.info(f"Processing email thread {thread_id} for transactions")
+
+        # Process the entire thread
+        thread_transactions = thread_processor.process_thread_for_transactions(thread_id, db)
+
+        if not thread_transactions:
+            logger.info(f"No transactions found in thread {thread_id}")
+            return {
+                "thread_id": thread_id,
+                "status": "no_transactions",
+                "transactions_found": 0
+            }
+
+        # Create transaction approvals for each found transaction
+        created_approvals = []
+        for transaction_data in thread_transactions:
+            try:
+                # Get the primary message for this thread
+                primary_message = db.query(EmailMessage).filter(
+                    EmailMessage.thread_id == thread_id,
+                    EmailMessage.is_thread_root == True
+                ).first()
+
+                if not primary_message:
+                    # Fallback to first message in thread
+                    primary_message = db.query(EmailMessage).filter(
+                        EmailMessage.thread_id == thread_id
+                    ).order_by(EmailMessage.received_at.asc()).first()
+
+                if not primary_message:
+                    logger.error(f"No messages found for thread {thread_id}")
+                    continue
+
+                # Create transaction approval
+                approval = TransactionApproval(
+                    email_message_id=primary_message.id,
+                    extracted_data=transaction_data.get("extracted_data", {}),
+                    confidence_score=transaction_data.get("confidence_score", 0.5),
+                    status=ApprovalStatusEnum.PENDING,
+                    processing_notes=transaction_data.get("processing_notes", [])
+                )
+
+                db.add(approval)
+                db.flush()
+
+                created_approvals.append({
+                    "approval_id": approval.id,
+                    "confidence_score": approval.confidence_score,
+                    "extracted_data": approval.extracted_data
+                })
+
+                logger.info(f"Created transaction approval {approval.id} for thread {thread_id}")
+
+            except Exception as approval_error:
+                logger.error(f"Error creating approval for thread {thread_id}: {approval_error}")
+                continue
+
+        db.commit()
+
+        return {
+            "thread_id": thread_id,
+            "status": "success",
+            "transactions_found": len(created_approvals),
+            "approvals_created": created_approvals
+        }
+
+    except Exception as e:
+        logger.error(f"Error processing thread {thread_id}: {e}")
+        db.rollback()
+        return {
+            "thread_id": thread_id,
+            "status": "error",
+            "error": str(e)
+        }
+    finally:
+        db.close()
 
 
 @celery_app.task(bind=True, max_retries=3)

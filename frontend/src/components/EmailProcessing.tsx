@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import {
   Mail,
@@ -18,7 +19,11 @@ import {
   TrendingUp,
   Database,
   Filter,
-  Zap
+  Zap,
+  List,
+  Calendar,
+  DollarSign,
+  Building
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -34,12 +39,34 @@ interface SyncResult {
   message: string;
   account_id: number;
   status: string;
-  synced_messages: number;
+  messages_synced: number;  // Fixed: backend returns 'messages_synced', not 'synced_messages'
   messages_queued?: number;
   financial_emails_found?: number;
   skipped_non_financial?: number;
   messages?: any[];
   error?: string;
+}
+
+interface FinancialEmail {
+  id: number;
+  subject: string;
+  sender: string;
+  received_at: string;
+  processing_status: string;
+  financial_confidence?: number;
+  has_attachments: boolean;
+}
+
+interface EmailStats {
+  total_emails: number;
+  financial_emails: number;
+  processed_emails: number;
+  pending_approvals: number;
+  confidence_distribution: {
+    high: number;
+    medium: number;
+    low: number;
+  };
 }
 
 interface SyncProgress {
@@ -61,11 +88,47 @@ export function EmailProcessing() {
   const [showDetails, setShowDetails] = useState<number | null>(null);
   const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
   const [lastSyncResults, setLastSyncResults] = useState<{[key: number]: SyncResult}>({});
+  const [emails, setEmails] = useState<FinancialEmail[]>([]);
+  const [emailStats, setEmailStats] = useState<EmailStats | null>(null);
+  const [emailsLoading, setEmailsLoading] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'processed' | 'pending'>('all');
   const { toast } = useToast();
 
   // Get auth token
   const getAuthToken = () => {
     return localStorage.getItem('accessToken');
+  };
+
+  // Fetch financial emails
+  const fetchFinancialEmails = async () => {
+    try {
+      setEmailsLoading(true);
+      const token = getAuthToken();
+
+      const response = await fetch('/api/email/financial-emails', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setEmails(data.emails || []);
+        setEmailStats(data.stats || null);
+      } else {
+        throw new Error('Failed to fetch financial emails');
+      }
+    } catch (error) {
+      console.error('Error fetching financial emails:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load financial emails",
+        variant: "destructive",
+      });
+    } finally {
+      setEmailsLoading(false);
+    }
   };
 
   // Fetch connected email accounts
@@ -99,7 +162,7 @@ export function EmailProcessing() {
     }
   };
 
-  // Connect Gmail account
+  // Connect Gmail account with improved COOP-compatible flow
   const connectGmailAccount = async () => {
     try {
       const token = getAuthToken();
@@ -114,74 +177,17 @@ export function EmailProcessing() {
       if (response.ok) {
         const data = await response.json();
 
-        // Open OAuth URL in popup window
-        const popup = window.open(
-          data.authorization_url,
-          'gmail_oauth',
-          'width=500,height=600,scrollbars=yes,resizable=yes'
-        );
-
-        if (!popup) {
-          throw new Error('Popup blocked. Please allow popups for this site.');
-        }
+        // Store current page state for return navigation
+        sessionStorage.setItem('oauth_return_page', window.location.pathname);
+        sessionStorage.setItem('oauth_in_progress', 'true');
 
         toast({
           title: "Gmail Authorization",
-          description: "Please complete the authorization in the popup window",
+          description: "Redirecting to Google for authorization...",
         });
 
-        // Listen for popup completion
-        const checkClosed = setInterval(() => {
-          if (popup.closed) {
-            clearInterval(checkClosed);
-            // Refresh accounts after popup closes
-            setTimeout(() => {
-              fetchEmailAccounts();
-            }, 1000);
-          }
-        }, 1000);
-
-        // Listen for messages from popup
-        const messageListener = (event: MessageEvent) => {
-          if (event.origin !== window.location.origin) return;
-
-          if (event.data.type === 'GMAIL_OAUTH_SUCCESS') {
-            clearInterval(checkClosed);
-            popup.close();
-
-            toast({
-              title: "Gmail Connected",
-              description: `Successfully connected ${event.data.email}`,
-            });
-
-            // Refresh accounts
-            fetchEmailAccounts();
-
-            window.removeEventListener('message', messageListener);
-          } else if (event.data.type === 'GMAIL_OAUTH_ERROR') {
-            clearInterval(checkClosed);
-            popup.close();
-
-            toast({
-              title: "Connection Failed",
-              description: event.data.error || "Failed to connect Gmail account",
-              variant: "destructive",
-            });
-
-            window.removeEventListener('message', messageListener);
-          }
-        };
-
-        window.addEventListener('message', messageListener);
-
-        // Cleanup after 5 minutes
-        setTimeout(() => {
-          clearInterval(checkClosed);
-          window.removeEventListener('message', messageListener);
-          if (!popup.closed) {
-            popup.close();
-          }
-        }, 300000);
+        // Use direct redirect instead of popup to avoid COOP issues
+        window.location.href = data.authorization_url;
 
       } else {
         throw new Error('Failed to initiate OAuth');
@@ -248,14 +254,14 @@ export function EmailProcessing() {
             progress: 100,
             message: 'Sync completed successfully!',
             details: {
-              emailsFound: result.synced_messages,
+              emailsFound: result.messages_synced,  // Fixed: use correct field name
               transactionsExtracted: result.messages_queued || 0
             }
           });
 
           toast({
             title: "Sync Completed",
-            description: `Successfully processed ${result.synced_messages} emails, found ${result.messages_queued || 0} financial transactions`,
+            description: `Successfully processed ${result.messages_synced} emails, found ${result.messages_queued || 0} financial transactions`,
           });
 
           // Refresh accounts to update last_sync_at
@@ -314,13 +320,14 @@ export function EmailProcessing() {
         // Final check after 3 seconds
         setTimeout(() => {
           fetchEmailAccounts();
+          fetchFinancialEmails(); // Refresh email list after sync
           setSyncProgress(prev => prev ? {
             ...prev,
             stage: 'completed',
             progress: 100,
-            message: 'Sync completed! Check transaction approvals for new items.'
+            message: 'Sync completed! Check the Financial Emails tab for new items.'
           } : null);
-          setTimeout(() => setSyncProgress(null), 3000);
+          setTimeout(() => setSyncProgress(null), 5000); // Show success message longer
         }, 3000);
       }
     };
@@ -367,17 +374,58 @@ export function EmailProcessing() {
     }
   };
 
-  // Load accounts on component mount
+  // Load accounts and emails on component mount
   useEffect(() => {
     fetchEmailAccounts();
-    
-    // Listen for refresh events from OAuth callback
+    fetchFinancialEmails();
+
+    // Check if returning from OAuth flow
+    const oauthInProgress = sessionStorage.getItem('oauth_in_progress');
+    const oauthSuccess = sessionStorage.getItem('oauth_success');
+    const oauthError = sessionStorage.getItem('oauth_error');
+    const oauthEmail = sessionStorage.getItem('oauth_email');
+
+    if (oauthInProgress === 'true') {
+      // Clear the flags
+      sessionStorage.removeItem('oauth_in_progress');
+      sessionStorage.removeItem('oauth_success');
+      sessionStorage.removeItem('oauth_error');
+      sessionStorage.removeItem('oauth_email');
+
+      if (oauthSuccess === 'true') {
+        // Show success message
+        toast({
+          title: "Gmail Connected",
+          description: `Successfully connected ${oauthEmail || 'Gmail account'}!`,
+        });
+      } else if (oauthError) {
+        // Show error message
+        toast({
+          title: "Connection Failed",
+          description: `Failed to connect Gmail: ${oauthError}`,
+          variant: "destructive",
+        });
+      } else {
+        // Generic processing message
+        toast({
+          title: "Gmail Authorization",
+          description: "Checking authorization status...",
+        });
+      }
+
+      // Refresh accounts after a short delay to allow backend processing
+      setTimeout(() => {
+        fetchEmailAccounts();
+      }, 2000);
+    }
+
+    // Listen for refresh events from OAuth callback (fallback)
     const handleRefresh = () => {
       fetchEmailAccounts();
     };
-    
+
     window.addEventListener('refreshEmailAccounts', handleRefresh);
-    
+
     return () => {
       window.removeEventListener('refreshEmailAccounts', handleRefresh);
     };
@@ -389,6 +437,28 @@ export function EmailProcessing() {
     if (!dateString) return 'Never';
     return new Date(dateString).toLocaleString();
   };
+
+  // Helper functions for email display
+  const getConfidenceBadge = (confidence?: number) => {
+    if (!confidence) return { label: 'Unknown', variant: 'secondary' as const };
+    if (confidence >= 0.8) return { label: 'High', variant: 'default' as const };
+    if (confidence >= 0.6) return { label: 'Medium', variant: 'secondary' as const };
+    return { label: 'Low', variant: 'outline' as const };
+  };
+
+  const getConfidenceColor = (confidence: number) => {
+    if (confidence >= 0.8) return 'text-green-600';
+    if (confidence >= 0.6) return 'text-yellow-600';
+    return 'text-red-600';
+  };
+
+  // Filter emails based on current filter
+  const filteredEmails = emails.filter(email => {
+    if (filter === 'all') return true;
+    if (filter === 'processed') return email.processing_status === 'processed';
+    if (filter === 'pending') return email.processing_status === 'pending';
+    return true;
+  });
 
   // Progress indicator component
   const SyncProgressIndicator = ({ progress }: { progress: SyncProgress }) => (
@@ -439,18 +509,18 @@ export function EmailProcessing() {
         </span>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-xs">
         <div className="text-green-700 dark:text-green-300">
-          <div className="font-medium">Emails Processed</div>
-          <div className="text-lg font-bold">{result.synced_messages}</div>
+          <div className="font-medium">Total Processed</div>
+          <div className="text-lg font-bold">{result.messages_synced || 0}</div>
+          <div className="text-xs opacity-75">Max: 500 per sync</div>
         </div>
 
-        {result.messages_queued !== undefined && (
-          <div className="text-green-700 dark:text-green-300">
-            <div className="font-medium">Transactions Found</div>
-            <div className="text-lg font-bold">{result.messages_queued}</div>
-          </div>
-        )}
+        <div className="text-blue-700 dark:text-blue-300">
+          <div className="font-medium">New Emails Found</div>
+          <div className="text-lg font-bold">{result.messages_queued || 0}</div>
+          <div className="text-xs opacity-75">Queued for processing</div>
+        </div>
 
         {result.financial_emails_found !== undefined && (
           <div className="text-green-700 dark:text-green-300">
@@ -465,6 +535,18 @@ export function EmailProcessing() {
             <div className="text-lg font-bold">{result.skipped_non_financial}</div>
           </div>
         )}
+
+        <div className="text-purple-700 dark:text-purple-300">
+          <div className="font-medium">Sync Method</div>
+          <div className="text-sm font-bold">Hybrid Sync</div>
+          <div className="text-xs opacity-75">Threads + Messages</div>
+        </div>
+
+        <div className="text-gray-700 dark:text-gray-300">
+          <div className="font-medium">Existing Emails</div>
+          <div className="text-lg font-bold">{(result.messages_synced || 0) - (result.messages_queued || 0)}</div>
+          <div className="text-xs opacity-75">Already in system</div>
+        </div>
       </div>
     </div>
   );
@@ -489,10 +571,25 @@ export function EmailProcessing() {
       <Alert>
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          We'll automatically scan your emails for financial transactions from banks, payment processors, 
+          We'll automatically scan your emails for financial transactions from banks, payment processors,
           and e-wallets. All data is encrypted and processed securely.
         </AlertDescription>
       </Alert>
+
+      {/* Main Content Tabs */}
+      <Tabs defaultValue="accounts" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="accounts" className="flex items-center gap-2">
+            <Settings className="h-4 w-4" />
+            Email Accounts
+          </TabsTrigger>
+          <TabsTrigger value="emails" className="flex items-center gap-2">
+            <List className="h-4 w-4" />
+            Financial Emails ({emails.length})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="accounts" className="space-y-4">
 
       {/* Connected Accounts */}
       <Card>
@@ -688,6 +785,145 @@ export function EmailProcessing() {
           </div>
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="emails" className="space-y-4">
+          {/* Email Statistics */}
+          {emailStats && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  Email Statistics
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">{emailStats.total_emails}</div>
+                    <div className="text-sm text-muted-foreground">Total Emails</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">{emailStats.financial_emails}</div>
+                    <div className="text-sm text-muted-foreground">Financial Emails</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-purple-600">{emailStats.processed_emails}</div>
+                    <div className="text-sm text-muted-foreground">Processed</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-orange-600">{emailStats.pending_approvals}</div>
+                    <div className="text-sm text-muted-foreground">Pending Approvals</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Email Filter */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Filter className="h-5 w-5" />
+                  Financial Emails ({filteredEmails.length})
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={filter === 'all' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setFilter('all')}
+                  >
+                    All
+                  </Button>
+                  <Button
+                    variant={filter === 'processed' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setFilter('processed')}
+                  >
+                    Processed
+                  </Button>
+                  <Button
+                    variant={filter === 'pending' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setFilter('pending')}
+                  >
+                    Pending
+                  </Button>
+                  <Button onClick={fetchFinancialEmails} variant="outline" size="sm">
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {emailsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : filteredEmails.length === 0 ? (
+                <div className="text-center py-8">
+                  <Mail className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-medium mb-2">No Financial Emails Found</h3>
+                  <p className="text-muted-foreground">
+                    {filter === 'all'
+                      ? 'No financial emails have been detected yet. Try syncing your email accounts.'
+                      : `No ${filter} financial emails found. Try changing the filter.`
+                    }
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {filteredEmails.map((email) => {
+                    const confidenceBadge = getConfidenceBadge(email.financial_confidence);
+
+                    return (
+                      <div
+                        key={email.id}
+                        className="border rounded-lg p-4 hover:bg-muted/20 transition-colors"
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-medium truncate">{email.subject}</h3>
+                            <p className="text-sm text-muted-foreground truncate">{email.sender}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatDate(email.received_at)}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2 ml-4">
+                            <Badge variant={confidenceBadge.variant} className="text-xs">
+                              {confidenceBadge.label}
+                            </Badge>
+                            {email.financial_confidence && (
+                              <span className={`text-xs font-medium ${getConfidenceColor(email.financial_confidence)}`}>
+                                {Math.round(email.financial_confidence * 100)}%
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            Status: {email.processing_status}
+                          </div>
+                          {email.has_attachments && (
+                            <div className="flex items-center gap-1">
+                              <Database className="h-3 w-3" />
+                              Has attachments
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from database import get_db
 from src.auth.dependencies import get_current_active_user
-from models import User, EmailAccount, TransactionApproval, ApprovalStatusEnum
+from models import User, EmailAccount, TransactionApproval, ApprovalStatusEnum, ProcessingStatusEnum
 from .gmail_service import gmail_service
 # from .schemas import EmailAccountResponse  # Temporarily commented out
 
@@ -94,12 +94,13 @@ async def handle_oauth_callback(
         
         # Exchange code for tokens
         try:
+            logger.info(f"Attempting to exchange OAuth code for tokens (user_id: {user_id})")
             token_data = gmail_service.exchange_code_for_tokens(code)
-            logger.info(f"Successfully exchanged OAuth code for tokens")
+            logger.info(f"Successfully exchanged OAuth code for tokens (user_id: {user_id})")
         except Exception as token_error:
-            logger.error(f"Failed to exchange OAuth code: {token_error}")
+            logger.error(f"Failed to exchange OAuth code for user {user_id}: {token_error}", exc_info=True)
             return RedirectResponse(
-                url=f"http://localhost:8080/oauth-callback?oauth_error=token_exchange_failed",
+                url=f"http://localhost:8080/oauth-callback?oauth_error=token_exchange_failed&details={str(token_error)[:100]}",
                 status_code=302
             )
         

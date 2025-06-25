@@ -69,12 +69,15 @@ class EmailMessage(Base):
     id = Column(Integer, primary_key=True, index=True)
     email_account_id = Column(Integer, ForeignKey("email_accounts.id"), nullable=False)
     message_id = Column(String(255), nullable=False, index=True)  # Gmail message ID
+    thread_id = Column(String(255), nullable=True, index=True)  # Gmail thread ID for conversation grouping
     subject = Column(String(500), nullable=True)
     sender = Column(String(255), nullable=True)
     received_at = Column(DateTime(timezone=True), nullable=False)
     processed_at = Column(DateTime(timezone=True), nullable=True)
     processing_status = Column(Enum(ProcessingStatusEnum), default=ProcessingStatusEnum.PENDING)
     has_attachments = Column(Boolean, default=False)
+    thread_message_count = Column(Integer, nullable=True, default=1)  # Number of messages in this thread
+    is_thread_root = Column(Boolean, nullable=True, default=True)  # True if this is the first message in thread
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 

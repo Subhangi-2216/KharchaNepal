@@ -22,7 +22,7 @@ class EmailContentExtractor:
     
     # Enhanced financial email patterns
     FINANCIAL_SENDERS = [
-        # Nepali Banks (Comprehensive list)
+        # Nepali Banks (Comprehensive list with enhanced patterns)
         r'.*@.*nabilbank\.com.*',
         r'.*@.*nic\.com\.np.*',
         r'.*@.*kumaribank\.com.*',
@@ -44,6 +44,25 @@ class EmailContentExtractor:
         r'.*@.*sunrisebank\.com.*',
         r'.*@.*centurybank\.com\.np.*',
         r'.*@.*sanima\.com\.np.*',
+
+        # Additional Nepali Banks (NEW)
+        r'.*@.*megabank\.com\.np.*',
+        r'.*@.*citizensbank\.com\.np.*',
+        r'.*@.*kistbank\.com\.np.*',
+        r'.*@.*janabank\.com\.np.*',
+        r'.*@.*shinhanbank\.com\.np.*',
+        r'.*@.*muktinathbank\.com\.np.*',
+        r'.*@.*prabhubank\.com\.np.*',
+
+        # Bank SMS and notification gateways (NEW - critical for transaction alerts)
+        r'.*@.*sms\..*bank.*',
+        r'.*@.*alert\..*bank.*',
+        r'.*@.*notification\..*bank.*',
+        r'.*@.*txn\..*bank.*',
+        r'.*@.*transaction\..*bank.*',
+        r'.*@.*banking\..*',
+        r'.*@.*mobilebanking\..*',
+        r'.*@.*internetbanking\..*',
 
         # International Banks (Major institutions)
         r'.*@.*bank.*\.com',
@@ -163,20 +182,46 @@ class EmailContentExtractor:
         r'.*customer.*@.*bank.*',
         r'.*service.*@.*bank.*',
 
-        # Enhanced Alert and Notification Patterns
+        # Enhanced Alert and Notification Patterns (improved for bank transactions)
         r'.*txn.*alert.*@.*',
         r'.*transaction.*alert.*@.*',
         r'.*account.*alert.*@.*',
         r'.*banking.*alert.*@.*',
         r'.*payment.*alert.*@.*',
+        r'.*debit.*alert.*@.*',
+        r'.*credit.*alert.*@.*',
+        r'.*balance.*alert.*@.*',
+        r'.*fund.*alert.*@.*',
+        r'.*transfer.*alert.*@.*',
+        r'.*withdrawal.*alert.*@.*',
+        r'.*deposit.*alert.*@.*',
+        r'.*card.*alert.*@.*',
+        r'.*atm.*alert.*@.*',
+
+        # Banking service patterns (enhanced)
         r'.*mobile.*banking.*@.*',
         r'.*internet.*banking.*@.*',
         r'.*digital.*banking.*@.*',
+        r'.*online.*banking.*@.*',
+        r'.*net.*banking.*@.*',
+        r'.*sms.*banking.*@.*',
+
+        # Digital wallet patterns (enhanced)
         r'.*wallet.*@.*',
         r'.*ewallet.*@.*',
         r'.*e-wallet.*@.*',
+        r'.*digital.*wallet.*@.*',
+        r'.*mobile.*wallet.*@.*',
+
+        # Bank notification systems (NEW)
+        r'.*notification.*@.*bank.*',
+        r'.*alerts?.*@.*bank.*',
+        r'.*updates?.*@.*bank.*',
+        r'.*info.*@.*bank.*',
+        r'.*sms.*@.*bank.*',
+        r'.*email.*@.*bank.*',
     ]
-    
+
     # Enhanced financial keywords in subject lines
     FINANCIAL_KEYWORDS = [
         # Transaction types (Comprehensive)
@@ -186,6 +231,12 @@ class EmailContentExtractor:
         'remittance', 'disbursement', 'reimbursement', 'payout', 'payoff',
         'installment', 'instalment', 'emi', 'premium', 'fee', 'fine',
         'penalty', 'tax', 'vat', 'gst', 'duty', 'customs', 'tariff',
+
+        # Additional transaction keywords
+        'checkout', 'subscription', 'renewal', 'auto-pay', 'autopay',
+        'recurring', 'monthly', 'annual', 'billing', 'charged', 'debited',
+        'credited', 'processed', 'approved', 'declined', 'failed',
+        'successful', 'completed', 'pending', 'authorized', 'captured',
 
         # Transaction Alert Patterns (Critical for bank notifications)
         'transaction alert', 'txn alert', 'account alert', 'banking alert',
@@ -541,11 +592,48 @@ class EmailContentExtractor:
         """
         is_financial, confidence = self.is_financial_email(sender, subject, "")
 
-        # Use a very low threshold (0.1) to be inclusive during pre-filtering
+        # Enhanced pre-filtering logic for better standalone email detection
+        sender_lower = sender.lower()
+        subject_lower = subject.lower()
+
+        # Always process emails from known financial institutions (even with low confidence)
+        financial_domains = [
+            'bank', 'esewa', 'khalti', 'ime', 'fonepay', 'connectips',
+            'paypal', 'stripe', 'square', 'venmo', 'wise', 'remitly',
+            'visa', 'mastercard', 'amex', 'discover'
+        ]
+
+        for domain in financial_domains:
+            if domain in sender_lower:
+                logger.debug(f"Processing email from financial domain: {domain} in {sender}")
+                return True
+
+        # Always process emails with strong financial keywords in subject (enhanced for bank alerts)
+        strong_financial_keywords = [
+            # Core transaction terms
+            'payment', 'transaction', 'receipt', 'invoice', 'bill', 'statement',
+            'transfer', 'deposit', 'withdrawal', 'refund', 'charge', 'purchase',
+
+            # Bank alert terms (NEW - critical for transaction notifications)
+            'transaction alert', 'txn alert', 'payment alert', 'account alert',
+            'debit alert', 'credit alert', 'banking alert', 'balance alert',
+            'transaction notification', 'payment notification', 'fund transfer',
+            'money transfer', 'card transaction', 'atm transaction',
+
+            # Banking activity terms
+            'account activity', 'balance update', 'mobile banking', 'internet banking',
+            'online banking', 'net banking', 'digital banking'
+        ]
+
+        for keyword in strong_financial_keywords:
+            if keyword in subject_lower:
+                logger.debug(f"Processing email with financial keyword: {keyword} in subject")
+                return True
+
+        # Use a very low threshold (0.05) to be inclusive during pre-filtering
         # This ensures we don't miss legitimate financial emails that might have
         # low confidence based on sender+subject alone but high confidence with body content
-        # The full financial detection with body content happens after sync
-        return confidence >= 0.1
+        return confidence >= 0.05
 
     def extract_gmail_message_content(self, credentials_dict: Dict[str, Any], message_id: str) -> Dict[str, Any]:
         """

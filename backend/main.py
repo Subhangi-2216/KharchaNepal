@@ -84,8 +84,15 @@ async def log_requests(request: Request, call_next):
     logging.info(f"Request: {request.method} {request.url}")
     # Process the request and get the response
     response = await call_next(request)
+
     # Add CORS headers to all responses
     response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+
+    # Add headers to help with OAuth popup/redirect issues
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
+    response.headers["Cross-Origin-Embedder-Policy"] = "unsafe-none"
+
     # Log the response status
     logging.info(f"Response status: {response.status_code}")
     return response
