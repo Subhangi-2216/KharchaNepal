@@ -1,0 +1,199 @@
+ 
+ -------------- celery@Aashishs-MacBook-Air.local v5.3.4 (emerald-rush)
+--- ***** ----- 
+-- ******* ---- macOS-15.5-arm64-arm-64bit 2025-06-24 11:08:57
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         kharcha_nepal:0x1027bf610
+- ** ---------- .> transport:   redis://localhost:6379/0
+- ** ---------- .> results:     redis://localhost:6379/0
+- *** --- * --- .> concurrency: 8 (prefork)
+-- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+--- ***** ----- 
+ -------------- [queues]
+                .> celery           exchange=celery(direct) key=celery
+                
+
+[tasks]
+  . src.email_processing.tasks.extract_transaction_data
+  . src.email_processing.tasks.process_email
+  . src.email_processing.tasks.sync_gmail_messages
+
+[2025-06-24 11:08:58,336: WARNING/MainProcess] /opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/celery/worker/consumer/consumer.py:507: CPendingDeprecationWarning: The broker_connection_retry configuration setting will no longer determine
+whether broker connection retries are made during startup in Celery 6.0 and above.
+If you wish to retain the existing behavior for retrying connections on startup,
+you should set broker_connection_retry_on_startup to True.
+  warnings.warn(
+
+[2025-06-24 11:08:58,345: INFO/MainProcess] Connected to redis://localhost:6379/0
+[2025-06-24 11:08:58,345: WARNING/MainProcess] /opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/celery/worker/consumer/consumer.py:507: CPendingDeprecationWarning: The broker_connection_retry configuration setting will no longer determine
+whether broker connection retries are made during startup in Celery 6.0 and above.
+If you wish to retain the existing behavior for retrying connections on startup,
+you should set broker_connection_retry_on_startup to True.
+  warnings.warn(
+
+[2025-06-24 11:08:58,347: INFO/MainProcess] mingle: searching for neighbors
+[2025-06-24 11:08:59,355: INFO/MainProcess] mingle: all alone
+[2025-06-24 11:08:59,375: INFO/MainProcess] celery@Aashishs-MacBook-Air.local ready.
+[2025-06-24 14:01:51,894: INFO/MainProcess] sync with worker1@Aashishs-MacBook-Air.local
+[2025-06-24 14:07:17,497: INFO/MainProcess] missed heartbeat from worker1@Aashishs-MacBook-Air.local
+[2025-06-24 18:13:58,890: WARNING/MainProcess] consumer: Connection to broker lost. Trying to re-establish the connection...
+Traceback (most recent call last):
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/celery/worker/consumer/consumer.py", line 340, in start
+    blueprint.start(self)
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/celery/bootsteps.py", line 116, in start
+    step.start(parent)
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/celery/worker/consumer/consumer.py", line 742, in start
+    c.loop(*c.loop_args())
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/celery/worker/loops.py", line 97, in asynloop
+    next(loop)
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/kombu/asynchronous/hub.py", line 373, in create_loop
+    cb(*cbargs)
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/kombu/transport/redis.py", line 1359, in on_readable
+    self.cycle.on_readable(fileno)
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/kombu/transport/redis.py", line 576, in on_readable
+    chan.handlers[type]()
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/kombu/transport/redis.py", line 925, in _receive
+    ret.append(self._receive_one(c))
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/kombu/transport/redis.py", line 935, in _receive_one
+    response = c.parse_response()
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/redis/client.py", line 824, in parse_response
+    response = self._execute(conn, try_read)
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/redis/client.py", line 800, in _execute
+    return conn.retry.call_with_retry(
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/redis/retry.py", line 49, in call_with_retry
+    fail(error)
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/redis/client.py", line 802, in <lambda>
+    lambda error: self._disconnect_raise_connect(conn, error),
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/redis/client.py", line 789, in _disconnect_raise_connect
+    raise error
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/redis/retry.py", line 46, in call_with_retry
+    return do()
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/redis/client.py", line 801, in <lambda>
+    lambda: command(*args, **kwargs),
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/redis/client.py", line 822, in try_read
+    return conn.read_response(disconnect_on_error=False, push_request=True)
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/redis/connection.py", line 500, in read_response
+    response = self._parser.read_response(disable_decoding=disable_decoding)
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 15, in read_response
+    result = self._read_response(disable_decoding=disable_decoding)
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 25, in _read_response
+    raw = self._buffer.readline()
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/redis/_parsers/socket.py", line 115, in readline
+    self._read_from_socket()
+  File "/opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/redis/_parsers/socket.py", line 68, in _read_from_socket
+    raise ConnectionError(SERVER_CLOSED_CONNECTION_ERROR)
+redis.exceptions.ConnectionError: Connection closed by server.
+[2025-06-24 18:13:58,951: WARNING/MainProcess] /opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/celery/worker/consumer/consumer.py:391: CPendingDeprecationWarning: 
+In Celery 5.1 we introduced an optional breaking change which
+on connection loss cancels all currently executed tasks with late acknowledgement enabled.
+These tasks cannot be acknowledged as the connection is gone, and the tasks are automatically redelivered
+back to the queue. You can enable this behavior using the worker_cancel_long_running_tasks_on_connection_loss
+setting. In Celery 5.1 it is set to False by default. The setting will be set to True by default in Celery 6.0.
+
+  warnings.warn(CANCEL_TASKS_BY_DEFAULT, CPendingDeprecationWarning)
+
+[2025-06-24 18:13:58,964: WARNING/MainProcess] /opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/celery/worker/consumer/consumer.py:507: CPendingDeprecationWarning: The broker_connection_retry configuration setting will no longer determine
+whether broker connection retries are made during startup in Celery 6.0 and above.
+If you wish to retain the existing behavior for retrying connections on startup,
+you should set broker_connection_retry_on_startup to True.
+  warnings.warn(
+
+[2025-06-24 18:13:58,975: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 2.00 seconds... (1/100)
+
+[2025-06-24 18:14:00,984: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 4.00 seconds... (2/100)
+
+[2025-06-24 18:14:04,998: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 6.00 seconds... (3/100)
+
+[2025-06-24 18:14:11,019: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 8.00 seconds... (4/100)
+
+[2025-06-24 18:14:19,041: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 10.00 seconds... (5/100)
+
+[2025-06-24 18:14:29,082: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 12.00 seconds... (6/100)
+
+[2025-06-24 18:14:41,122: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 14.00 seconds... (7/100)
+
+[2025-06-24 18:14:55,180: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 16.00 seconds... (8/100)
+
+[2025-06-24 18:15:11,230: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 18.00 seconds... (9/100)
+
+[2025-06-24 18:15:29,278: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 20.00 seconds... (10/100)
+
+[2025-06-24 18:15:49,344: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 22.00 seconds... (11/100)
+
+[2025-06-24 18:16:11,408: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 24.00 seconds... (12/100)
+
+[2025-06-24 18:16:35,467: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 26.00 seconds... (13/100)
+
+[2025-06-24 18:17:01,571: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 28.00 seconds... (14/100)
+
+[2025-06-24 18:17:29,679: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 30.00 seconds... (15/100)
+
+[2025-06-24 18:17:59,789: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (16/100)
+
+[2025-06-24 18:18:31,888: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (16/100)
+
+[2025-06-24 18:19:03,980: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (16/100)
+
+[2025-06-24 18:19:36,069: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (16/100)
+
+[2025-06-24 18:20:08,167: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (16/100)
+
+[2025-06-24 18:20:40,253: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (16/100)
+
+[2025-06-24 18:22:46,359: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (16/100)
+
+[2025-06-24 18:28:43,526: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (16/100)
+
+[2025-06-24 18:30:58,289: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (16/100)
+
+[2025-06-24 19:03:39,853: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (16/100)
+
+[2025-06-24 19:20:37,013: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (16/100)
+
+[2025-06-24 19:30:50,769: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (16/100)
+
+[2025-06-24 19:31:22,878: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (16/100)
+
+[2025-06-24 19:31:54,974: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 32.00 seconds... (16/100)
+
+[2025-06-24 19:32:27,096: INFO/MainProcess] Connected to redis://localhost:6379/0
+[2025-06-24 19:32:27,098: WARNING/MainProcess] /opt/anaconda3/envs/kharchanepal/lib/python3.10/site-packages/celery/worker/consumer/consumer.py:507: CPendingDeprecationWarning: The broker_connection_retry configuration setting will no longer determine
+whether broker connection retries are made during startup in Celery 6.0 and above.
+If you wish to retain the existing behavior for retrying connections on startup,
+you should set broker_connection_retry_on_startup to True.
+  warnings.warn(
+
+[2025-06-24 19:32:27,104: INFO/MainProcess] mingle: searching for neighbors
+[2025-06-24 19:32:28,123: INFO/MainProcess] mingle: all alone
+
+worker: Warm shutdown (MainProcess)
